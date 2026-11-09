@@ -12,9 +12,12 @@
   },
   "dependencies": {
     "@askwell/shared": "workspace:*",
+    "@clerk/nextjs": "7.9.25",
+    "@supabase/supabase-js": "2.119.0",
     "next": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "catalog:",
