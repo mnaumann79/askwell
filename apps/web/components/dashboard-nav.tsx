@@ -10,10 +10,12 @@ import { DASHBOARD_URL } from "../lib/clerk/urls";
 type NavSection = {
   label: string;
   href?: string;
+  /** The section the owner is looking at right now. */
+  current?: boolean;
 };
 
 const SECTIONS: NavSection[] = [
-  { label: "Overview", href: DASHBOARD_URL },
+  { label: "Overview", href: DASHBOARD_URL, current: true },
   { label: "Projects" },
   { label: "Knowledge" },
   { label: "Conversations" },
@@ -35,7 +37,10 @@ export function DashboardNav() {
     <header className="border-b border-border bg-surface backdrop-blur-glass">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/dashboard" className="text-sm font-semibold tracking-tight text-foreground">
+          <Link
+            href={DASHBOARD_URL}
+            className="text-sm font-semibold tracking-tight text-foreground"
+          >
             {APP_NAME}
           </Link>
           <UserMenu />
@@ -48,7 +53,7 @@ export function DashboardNav() {
                 {section.href ? (
                   <Link
                     href={section.href}
-                    aria-current="page"
+                    aria-current={section.current ? "page" : undefined}
                     className="inline-block rounded-lg px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-strong"
                   >
                     {section.label}
