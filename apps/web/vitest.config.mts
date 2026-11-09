@@ -6,6 +6,9 @@ export default defineConfig({
   oxc: { jsx: "react-jsx" },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.tsx", "tests/**/*.test.ts"],
+    // Tests live next to the code they test: `tests/` for the pages,
+    // `lib/` for the data access clients.
+    include: ["**/*.{test,spec}.{ts,tsx}"],
+    exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"],
   },
 });
