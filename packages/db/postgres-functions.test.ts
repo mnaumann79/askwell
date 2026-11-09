@@ -363,6 +363,21 @@ describe("the postgres functions", () => {
       expect(messages).toHaveLength(4);
     });
 
+    it("refuses a conversation that belongs to another project", async () => {
+      const other = await createProject(OWNER, "Other conversations", 10);
+      const conversation = await query<{ id: string }>(db, "select id from public.conversations limit 1");
+
+      await expect(
+        query(db, "select public.save_chat_turn($1, $2, $3, $4, $5)", [
+          conversation[0]?.id ?? "",
+          other.id,
+          "visitor-9",
+          "hello",
+          "hi",
+        ]),
+      ).rejects.toThrow(/does not belong to project/);
+    });
+
     it("may only be run by the server", async () => {
       await actAs(db, "authenticated", { sub: OWNER });
       await expect(

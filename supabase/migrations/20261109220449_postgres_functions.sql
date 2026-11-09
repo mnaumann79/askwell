@@ -201,7 +201,18 @@ begin
     values (p_project_id, p_visitor_id)
     returning id into v_conversation_id;
   else
-    v_conversation_id := p_conversation_id;
+    -- The conversation id comes from the visitor, and this function runs as
+    -- service_role, so RLS cannot catch a conversation of another project.
+    select id
+    into v_conversation_id
+    from public.conversations
+    where id = p_conversation_id
+      and project_id = p_project_id;
+
+    if not found then
+      raise exception 'conversation % does not belong to project %', p_conversation_id, p_project_id
+        using errcode = 'PT004';
+    end if;
   end if;
 
   insert into public.messages (conversation_id, role, body)
