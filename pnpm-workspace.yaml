@@ -1,0 +1,27 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# esbuild needs its install script to place the platform binary.
+onlyBuiltDependencies:
+  - esbuild
+
+# One version of each tool for the whole workspace.
+catalog:
+  "@electric-sql/pglite": 0.5.16
+  "@eslint/js": 10.0.1
+  "@tailwindcss/postcss": 4.3.5
+  "@types/node": 22.18.13
+  "@types/react": 19.3.0
+  "@types/react-dom": 19.3.0
+  eslint: 10.14.0
+  esbuild: 0.28.2
+  globals: 17.14.0
+  next: 16.4.6
+  prettier: 3.9.10
+  react: 19.3.1
+  react-dom: 19.3.1
+  tailwindcss: 4.3.5
+  typescript: 5.9.3
+  typescript-eslint: 8.72.2
+  vitest: 5.1.0

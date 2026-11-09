@@ -10,6 +10,12 @@ dist/
 out/
 .turbo/
 coverage/
+.pnpm-store/
+
+# Tooling caches
+*.tsbuildinfo
+.eslintcache
+.vercel/
 
 # OS / editor
 .DS_Store
