@@ -75,7 +75,20 @@ body {
     .scroll-reveal {
       animation: reveal linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 55%;
+      animation-range: entry 0% entry 30%;
     }
+  }
+}
+
+/*
+ * Visitors who ask for less motion get the content without the animation.
+ *
+ * These rules are not in a layer, so they win over the utilities Tailwind
+ * generates for the same classes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter,
+  .animate-pulse {
+    animation: none;
   }
 }

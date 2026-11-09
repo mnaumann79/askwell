@@ -1,3 +1,4 @@
+import { APP_NAME } from "@askwell/shared";
 import { SectionHeading } from "./section-heading";
 
 /**
@@ -6,7 +7,7 @@ import { SectionHeading } from "./section-heading";
 const STEPS = [
   {
     title: "Add your product info",
-    body: "Paste text or upload a PDF. Askwell reads it and keeps it as the only thing it answers from.",
+    body: `Paste text or upload a PDF. ${APP_NAME} reads it and keeps it as the only thing it answers from.`,
   },
   {
     title: "Copy one script tag",
