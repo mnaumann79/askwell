@@ -8,6 +8,7 @@ onlyBuiltDependencies:
 
 # One version of each tool for the whole workspace.
 catalog:
+  "@clerk/nextjs": 7.9.25
   "@electric-sql/pglite": 0.5.16
   "@eslint/js": 10.0.1
   "@tailwindcss/postcss": 4.3.5
