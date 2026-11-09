@@ -57,6 +57,15 @@ describe("createOwnerClient", () => {
     expect(token).toBe(CLERK_TOKEN);
   });
 
+  it("fetches a fresh token for every request", async () => {
+    await createOwnerClient();
+
+    const [, , options] = firstCall();
+    getTokenMock.mockResolvedValue("a-newer-clerk-token");
+
+    expect(await options.accessToken?.()).toBe("a-newer-clerk-token");
+  });
+
   it("never uses the service key", async () => {
     await createOwnerClient();
 
