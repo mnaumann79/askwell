@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@clerk/nextjs':
+      specifier: 7.9.25
+      version: 7.9.25
     '@electric-sql/pglite':
       specifier: 0.5.16
       version: 0.5.16
@@ -90,7 +93,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       '@clerk/nextjs':
-        specifier: 7.9.25
+        specifier: 'catalog:'
         version: 7.9.25(next@16.4.6(@types/node@22.18.13)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@supabase/supabase-js':
         specifier: 2.119.0

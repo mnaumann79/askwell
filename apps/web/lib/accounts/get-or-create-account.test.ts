@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOrCreateAccount } from "../lib/accounts";
+import { getOrCreateAccount } from "./get-or-create-account";
 
 describe("getOrCreateAccount", () => {
   it("returns a free account for the given Clerk user", async () => {
