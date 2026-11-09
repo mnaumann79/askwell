@@ -20,5 +20,8 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   }
 }
