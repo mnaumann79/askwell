@@ -40,10 +40,14 @@ async function seed(): Promise<void> {
   ownerProjectId = projects[0]?.id ?? "";
   otherProjectId = projects[1]?.id ?? "";
 
-  await db.query("insert into public.widget_configs (project_id) values ($1), ($2)", [
-    ownerProjectId,
-    otherProjectId,
-  ]);
+  await db.query(
+    `insert into public.widget_configs
+       (project_id, button_color, position, label, animation, header_text, show_badge)
+     values
+       ($1, '#111111', 'bottom-right', 'Chat', 'fade', 'Askwell', true),
+       ($2, '#111111', 'bottom-right', 'Chat', 'fade', 'Askwell', true)`,
+    [ownerProjectId, otherProjectId],
+  );
 
   const sources = await query<{ id: string; project_id: string }>(
     db,
@@ -173,6 +177,32 @@ describe("the initial schema", () => {
       );
 
       expect(rows).toHaveLength(0);
+    });
+
+    it("lets the API roles use the vector type", async () => {
+      // The vector type lives in the extensions schema. Without the usage grant
+      // a vector literal or a vector argument fails with "permission denied
+      // for schema extensions".
+      await actAs(db, "service_role");
+
+      const cast = await query<{ embedding: string }>(
+        db,
+        "select '[1,2,3]'::extensions.vector as embedding",
+      );
+      expect(cast[0]?.embedding).toContain("1,2,3");
+
+      const inserted = await query<{ id: string }>(
+        db,
+        `insert into public.knowledge_chunks (project_id, source_id, content, embedding)
+         select $1, s.id, 'with embedding',
+           ('[' || array_to_string(array_fill(0::real, array[1536]), ',') || ']')::extensions.vector
+         from public.knowledge_sources s where s.project_id = $1 limit 1
+         returning id`,
+        [ownerProjectId],
+      );
+      expect(inserted).toHaveLength(1);
+
+      await db.query("delete from public.knowledge_chunks where id = $1", [inserted[0]?.id ?? ""]);
     });
   });
 

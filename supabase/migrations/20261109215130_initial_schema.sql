@@ -37,15 +37,19 @@ create table public.projects (
 
 create index projects_owner_id_idx on public.projects (owner_id);
 
+-- The widget config has no defaults on purpose: the values live in one place,
+-- DEFAULT_WIDGET_CONFIG in @askwell/shared (docs/project.md §5), and
+-- create_project writes them from there. A default here would be a second
+-- copy that can drift.
 create table public.widget_configs (
   project_id uuid primary key references public.projects (id) on delete cascade,
-  button_color text not null default '#111111',
-  position text not null default 'bottom-right'
+  button_color text not null,
+  position text not null
     check (position in ('bottom-right', 'bottom-left', 'top-right', 'top-left')),
-  label text not null default 'Chat',
-  animation text not null default 'fade' check (animation in ('fade', 'slide', 'scale')),
-  header_text text not null default 'Askwell',
-  show_badge boolean not null default true
+  label text not null,
+  animation text not null check (animation in ('fade', 'slide', 'scale')),
+  header_text text not null,
+  show_badge boolean not null
 );
 
 create table public.knowledge_sources (
@@ -209,6 +213,11 @@ create policy messages_select_own
 -- Grants ----------------------------------------------------------------------
 
 grant usage on schema public to anon, authenticated, service_role;
+
+-- The vector type lives in the extensions schema. Without this the API roles
+-- cannot use the type at all: a vector argument or a vector literal fails with
+-- "permission denied for schema extensions".
+grant usage on schema extensions to anon, authenticated, service_role;
 
 -- The owner reads their own rows, renames their projects and deletes them.
 grant select on public.accounts to authenticated;
