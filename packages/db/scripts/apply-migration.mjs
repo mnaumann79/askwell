@@ -14,6 +14,10 @@
  * bytes in `statements` — so the applied content is checkable afterwards, and the check
  * is the same one this script runs itself.
  *
+ * The migration and the row land in one batch: the file's own SQL first, the insert
+ * second. The Management API runs a multi-statement string as one transaction, so a
+ * migration that fails records nothing, and a recorded migration is an applied one.
+ *
  * Usage:
  *   pnpm db:apply <version> [--expect-sha256 <hex>]
  *

@@ -210,10 +210,7 @@ describe("apply-migration", () => {
         throw new Error(`expected the apply to succeed: ${result.message}`);
       }
 
-      const rows = await query(
-        db,
-        "select created_by from supabase_migrations.schema_migrations",
-      );
+      const rows = await query(db, "select created_by from supabase_migrations.schema_migrations");
 
       expect(rows).toHaveLength(1);
       expect(rows[0]?.created_by).toBe("mnaumann79@gmail.com");
