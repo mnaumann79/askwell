@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Askwell widget — the Phase 2 check</title>
+  </head>
+  <body>
+    <!--
+      The page a customer would have: the install snippet and nothing else. No
+      framework, no bundler, no script of its own — the widget is the only
+      thing on it.
+
+      The two placeholders are filled in by phase2-check.mjs, which serves this
+      file from 127.0.0.1 so the page sits on another origin than the app. The
+      served copy is what the browser gets, and the report prints it.
+    -->
+    <main>
+      <h1>A plain page on another origin</h1>
+      <p>
+        The widget in the corner is the only thing on this page. It was loaded with the install
+        snippet, from another origin, and it does not know anything about this page.
+      </p>
+    </main>
+    <script src="{{WIDGET_ORIGIN}}/widget.js" data-key="{{PUBLIC_KEY}}"></script>
+  </body>
+</html>
