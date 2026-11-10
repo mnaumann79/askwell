@@ -20,7 +20,7 @@ const SECTIONS: NavSection[] = [
   { label: "Knowledge" },
   { label: "Conversations" },
   { label: "Customize" },
-  { label: "Install" },
+  { label: "Install", href: `${DASHBOARD_URL}/install` },
   { label: "Billing" },
   { label: "Usage" },
 ];
