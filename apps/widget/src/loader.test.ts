@@ -23,7 +23,13 @@ function configResponse(config: unknown, status = 200): Response {
 /** The color the browser ends up with: the loader sets a hex, the DOM stores rgb. */
 function rgb(hex: string): string {
   const digits = hex.replace("#", "");
-  const full = digits.length === 3 ? digits.split("").map((d) => d + d).join("") : digits;
+  const full =
+    digits.length === 3
+      ? digits
+          .split("")
+          .map((d) => d + d)
+          .join("")
+      : digits;
   const parts = [0, 2, 4].map((start) => Number.parseInt(full.slice(start, start + 2), 16));
   return `rgb(${parts.join(", ")})`;
 }
@@ -174,7 +180,10 @@ describe("the messages", () => {
     const frame = openPanel(shadow);
 
     window.dispatchEvent(
-      new MessageEvent("message", { origin: ORIGIN, data: { type: "askwell:resize", height: 700 } }),
+      new MessageEvent("message", {
+        origin: ORIGIN,
+        data: { type: "askwell:resize", height: 700 },
+      }),
     );
 
     expect(frame?.getAttribute("style")).toContain("640px");
