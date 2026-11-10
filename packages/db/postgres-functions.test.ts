@@ -31,7 +31,8 @@ const CONFIG = JSON.stringify(WIDGET_CONFIG);
  * `P0001` is the SQLSTATE of a deliberate raise. PostgREST maps it to 400 and
  * hands the code, the message, the details and the hint through, while a
  * custom code like `PT001` falls back to 5xx and comes back from the Data API
- * as a 502 with an empty body and no code at all.
+ * as a 502 with no error code in it: the gateway's own 110 bytes of plain
+ * text, with no JSON to read.
  */
 const REFUSAL_SQLSTATE = "P0001";
 
