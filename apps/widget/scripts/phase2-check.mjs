@@ -29,7 +29,7 @@
  *   npm i playwright && npx playwright install chromium
  */
 import { createServer } from "node:http";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -448,7 +448,7 @@ async function main() {
   try {
     config = JSON.parse(configText);
   } catch {
-    config = null;
+    // Not JSON: the answer is not the route's answer.
   }
 
   const settings = config && typeof config === "object" ? config.config : null;
