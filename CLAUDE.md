@@ -42,7 +42,7 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 
 ## Reviews and your next task
 
-- Fix every valid CodeRabbit or lead comment on the same branch. If a comment is wrong, reply on the PR with the reason. Answer every thread.
+- Fix every valid lead comment on the same branch. If a comment is wrong, reply on the PR with the reason. Answer every thread.
 - Once your PR is open, the lead may give you your next task. Take it on a new branch from `main`.
 - When review comments arrive on an earlier PR, switch back to that branch, fix, push, and return. Don't call `set_my_status` for the earlier task: it would update your current one. HQ tracks the earlier PR by itself.
 - Never start a task that needs code from one of your open PRs. If nothing independent is ready, say so.
