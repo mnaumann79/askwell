@@ -8,8 +8,8 @@ import { SIGN_IN_URL } from "../../lib/clerk/urls";
  * The dashboard home (docs/project.md §6.2).
  *
  * Signing in for the first time creates the owner's `accounts` row. That
- * happens inside `getOrCreateAccount`, which is still a mock here — the real
- * one lands in task P1F-T07.
+ * happens inside `getOrCreateAccount`, on the server, with the user id from
+ * the Clerk session.
  */
 export default async function DashboardPage() {
   const { userId } = await auth.protect({ unauthenticatedUrl: SIGN_IN_URL });
