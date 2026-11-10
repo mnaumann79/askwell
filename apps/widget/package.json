@@ -10,15 +10,17 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --minify --format=iife --target=es2019 --outfile=dist/widget.js && pnpm run check:size",
+    "build": "node scripts/build.mjs && pnpm run check:size",
     "check:size": "node scripts/check-size.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "esbuild": "catalog:",
     "eslint": "catalog:",
+    "jsdom": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vitest": "catalog:"

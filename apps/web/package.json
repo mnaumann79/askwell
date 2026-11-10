@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@askwell/shared": "workspace:*",
+    "@askwell/widget": "workspace:*",
     "@clerk/nextjs": "catalog:",
     "@supabase/supabase-js": "2.119.0",
     "next": "catalog:",

@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const MAX_BYTES = 5 * 1024;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const bundle = path.join(scriptDir, "..", "dist", "widget.js");
+const bundle = path.join(scriptDir, "..", "..", "web", "public", "widget.js");
 
 const limit = Number.parseInt(process.env.WIDGET_MAX_BYTES ?? "", 10) || MAX_BYTES;
 
