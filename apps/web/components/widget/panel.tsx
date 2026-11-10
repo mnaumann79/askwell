@@ -341,13 +341,7 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 /** The messages and the typing state. */
-export function MessageList({
-  messages,
-  typing,
-}: {
-  messages: PanelMessage[];
-  typing: boolean;
-}) {
+export function MessageList({ messages, typing }: { messages: PanelMessage[]; typing: boolean }) {
   if (messages.length === 0 && !typing) {
     return (
       <StateMessage

@@ -28,10 +28,7 @@ describe("the messages from the page that embeds the panel", () => {
   });
 
   it("takes the messages from that page", () => {
-    const message = readParentMessage(
-      { origin: PARENT, data: { type: "askwell:open" } },
-      PARENT,
-    );
+    const message = readParentMessage({ origin: PARENT, data: { type: "askwell:open" } }, PARENT);
 
     expect(message).toEqual({ type: "askwell:open" });
   });

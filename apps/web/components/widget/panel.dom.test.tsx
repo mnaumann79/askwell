@@ -236,9 +236,7 @@ describe("the panel in a browser", () => {
     await type(container, "Does it work on mobile?");
     await send(container);
 
-    await until(() =>
-      postMessage.mock.calls.some((call) => call[0].type === "askwell:unread"),
-    );
+    await until(() => postMessage.mock.calls.some((call) => call[0].type === "askwell:unread"));
 
     const unread = postMessage.mock.calls.find((call) => call[0].type === "askwell:unread");
     expect(unread?.[0]).toEqual({ type: "askwell:unread", count: 1 });
