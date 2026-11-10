@@ -373,16 +373,80 @@ and the same numbers are in PR #18's body — GitHub does not truncate a body, s
 
 ## 2. Where these facts live
 
-| Fact                                                         | Where                                                                                                             |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| The refusals now raise `P0001` with the reason in the `hint` | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql`                                                    |
-| The measured facts, carried in a migration's comment         | the file P1F-T12 produces, `20261110130500_plan_refusal_comment_correction.sql` (PR #14)                          |
-| The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                                                   |
-| The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242) |
-| The recipe's own answer today: 400, 115 bytes                | this runbook (§1.3) — a different refusal, so a different body                                                    |
-| What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                          |
-| The advisor findings, and the complete execute table         | this runbook (§1.3) and [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                            |
-| The two ACLs, and the grants to `PUBLIC`                     | this runbook (§1.3) and PR #18's body                                                                             |
+| Fact                                                         | Where                                                                                                                |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| The refusals now raise `P0001` with the reason in the `hint` | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql`                                                       |
+| The measured facts                                           | the migration file, `20261110130500_plan_refusal_comment_correction.sql` (PR #14) — in the repo, not in the database |
+| The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                                                      |
+| The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242)    |
+| The recipe's own answer today: 400, 115 bytes                | this runbook (§1.3) — a different refusal, so a different body                                                       |
+| What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                             |
+| The advisor findings, and the complete execute table         | this runbook (§1.3) and [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                               |
+| The two ACLs, and the grants to `PUBLIC`                     | this runbook (§1.3) and PR #18's body                                                                                |
 
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
 A merged migration is never edited, so it stays wrong on purpose and this runbook is the correction.
+
+**The measured facts live in the file, in the repo — not in the database.** A SQL comment is not stored
+with the function it belongs to: `obj_description` is empty for every function and `prosrc` holds only
+the body (§2.1). And the proof that a migration ran is `pg_proc.xmin`, the transaction that last wrote
+the catalog row (§2.2).
+
+### 2.1 The facts are in the file, not in the database
+
+The row above says where the measured facts live: in the migration file, in the
+repo. That is worth saying plainly, because the file the facts are in says
+something else — and what it says is not true of the database.
+
+`20261110130500_plan_refusal_comment_correction.sql` writes:
+
+> This file changes no behaviour. The four functions below are re-asserted with
+> `create or replace` and with the bodies they already have, because a comment
+> is only stored with the function it belongs to.
+
+**No comment is stored with the function.** The comment in that file sits
+_above_ the `create or replace function`, so it is not part of the function's
+body, and Postgres keeps no comment of its own on the function either:
+
+```sql
+select p.proname,
+       length(coalesce(obj_description(p.oid, 'pg_proc'), '')) as comment_length,
+       left(p.prosrc, 8) as prosrc_head
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+ order by p.proname;
+```
+
+Every function answers `comment_length` of 0, and `prosrc` starts at the body:
+`declare` for the four the file re-asserts, `select` for the rest. **The
+database carries none of the measured facts. They are in the file, in the repo.**
+
+### 2.2 The proof that the migration ran
+
+The file's comment says it "changes no behaviour", and that is right — but the
+file _did_ run, and the proof is `xmin`: the transaction that last wrote the
+catalog row.
+
+```sql
+select p.proname, p.xmin::text as xmin
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+ order by p.proname;
+```
+
+| Function                                                                          | `xmin`   |                                                |
+| --------------------------------------------------------------------------------- | -------- | ---------------------------------------------- |
+| `create_project`, `reserve_knowledge_source`, `consume_message`, `save_chat_turn` | **1358** | the four the file re-asserts — one transaction |
+| `match_chunks`                                                                    | 1235     | the file does not touch it                     |
+| `owned_project_ids`, `owned_conversation_ids`, `owner_activity`                   | 1231     | untouched                                      |
+
+Four functions, one `xmin`: they were written by the same transaction, and
+that transaction is the one the migration ran in. **That is the evidence that
+the SQL ran and not only the row.**
+
+**The migration file stays wrong on purpose.** A merged migration is never
+edited, so its sentence stays as it is — exactly like
+`20261110035018_plan_refusal_sqlstate.sql` says "empty body" in three places.
+**This runbook is the correction.**
