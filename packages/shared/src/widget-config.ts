@@ -1,23 +1,33 @@
+import { z } from "zod";
 import { APP_NAME } from "./app-name";
 
 /** Where the widget button sits on the customer's page (§5). */
-export type WidgetPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+export const widgetPositionSchema = z.enum([
+  "bottom-right",
+  "bottom-left",
+  "top-right",
+  "top-left",
+]);
+export type WidgetPosition = z.infer<typeof widgetPositionSchema>;
 
 /** How the panel opens (§5). */
-export type WidgetAnimation = "fade" | "slide" | "scale";
+export const widgetAnimationSchema = z.enum(["fade", "slide", "scale"]);
+export type WidgetAnimation = z.infer<typeof widgetAnimationSchema>;
 
-export type WidgetConfig = {
+/** The config of a widget: what the widget loader reads and the customizer writes. */
+export const widgetConfigSchema = z.object({
   /** Button color as a CSS color. */
-  buttonColor: string;
-  position: WidgetPosition;
+  buttonColor: z.string(),
+  position: widgetPositionSchema,
   /** Text on the button. */
-  label: string;
-  animation: WidgetAnimation;
+  label: z.string(),
+  animation: widgetAnimationSchema,
   /** Text in the panel header. */
-  headerText: string;
+  headerText: z.string(),
   /** Whether the "Powered by" badge shows. Free always shows it. */
-  showBadge: boolean;
-};
+  showBadge: z.boolean(),
+});
+export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
 /**
  * The config a new project starts with.
