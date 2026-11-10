@@ -209,9 +209,16 @@ for a function is EXECUTE to `PUBLIC`, so this is the exception and not the defa
 | `create_project`, `reserve_knowledge_source`, `consume_message`, `save_chat_turn`, `match_chunks` | `{postgres=X/postgres,service_role=X/postgres}`                          | 0                |
 | `owned_project_ids`, `owned_conversation_ids`, `owner_activity`                                   | `{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}` | 0                |
 
-The second row is the deliberate exception (docs/project.md §9: SECURITY INVOKER everywhere, DEFINER only for
-the RLS helpers): `authenticated` may execute those three, because the policies call the helpers and a policy
-runs with the privileges of the querying role.
+The second row is where `authenticated` may execute: the two RLS helpers, because the policies call
+them and a policy runs with the privileges of the querying role (docs/project.md §9: SECURITY INVOKER
+everywhere, DEFINER only for the RLS helpers), and `owner_activity`, which is SECURITY INVOKER itself.
+
+**The advisor's two WARNs are those two helpers, and they are the shape §9 asks for.** The lint
+`authenticated_security_definer_function_executable` names every SECURITY DEFINER function that
+`authenticated` may execute, and in `public` that is exactly `owned_project_ids` and
+`owned_conversation_ids` — the two the policies call. It cannot be silenced: revoking the grant breaks the
+five policies, and switching them to SECURITY INVOKER takes away the rows they exist to read. So the finding
+stays, and the grants table above is the answer to it.
 
 ### 1.4 What it means
 
@@ -286,7 +293,8 @@ the before-shape needed six: the answer is deliverable now, so the gateway never
 `no_account_or_project` one.
 
 Measured on askwell-dev on 2026-11-10, after `20261110024949` and `20261110035018` were applied to it. The
-bytes and the sha256 are in [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242).
+bytes and the sha256 are in [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242),
+and the same numbers are in PR #18's body — GitHub does not truncate a body, so that is the durable copy.
 
 ---
 
@@ -299,6 +307,8 @@ bytes and the sha256 are in [PR #12's comment](https://github.com/mnaumann79/ask
 | The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                                                   |
 | The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242) |
 | What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                          |
+| The advisor findings, and the complete execute table         | [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                                                    |
+| The two ACLs, and the grants to `PUBLIC`                     | this runbook (§1.3) and PR #18's body                                                                             |
 
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
 A merged migration is never edited, so it stays wrong on purpose and this runbook is the correction.
