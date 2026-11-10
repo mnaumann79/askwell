@@ -1,14 +1,15 @@
 import { SectionHeading } from "./section-heading";
-import { CopyButton } from "./copy-button";
+import { CopyButton } from "../copy-button";
+import { installSnippet } from "../install-snippet";
 
 /**
  * The install snippet (docs/project.md §6.1, §6.9).
  *
- * The real snippet carries the owner's own public key, which arrives with
- * projects in Phase 2, so this one uses a placeholder.
+ * The real snippet carries the owner's own public key, which the install page
+ * shows (Phase 2), so this one uses a placeholder. Both come from the same
+ * builder, so the two cannot drift apart.
  */
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://your-app.example";
-const SNIPPET = `<script src="${APP_URL}/widget.js" data-key="pk_..."></script>`;
+const SNIPPET = installSnippet("pk_...");
 
 export function Install() {
   return (
