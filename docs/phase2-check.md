@@ -94,7 +94,7 @@ through the browser's own protocol, which pierces a closed one.
 ## The run of 2026-11-10
 
 Against `https://askwell-git-check-phase2-preview-mnaumann79s-projects.vercel.app`,
-a preview built from `main` with the panel merged in (see below), with the key
+a plain preview built from `main`, with the key
 `pk_8ef8ea2f81ae46d88fcb81cd47c83526`.
 
 The config route answered **200**:
@@ -128,6 +128,21 @@ The host of the widget, as the browser rendered it:
   class="bottom-right"
   style="position: fixed; z-index: 2147483647; bottom: 16px; right: 16px;"
 ></div>
+```
+
+The panel's frame, as the browser placed it — the rectangle, and the offsets
+the rule gave it:
+
+```json
+{
+  "x": 16,
+  "y": 224,
+  "width": 343,
+  "height": 480,
+  "position": "absolute",
+  "bottom": "0px",
+  "right": "0px"
+}
 ```
 
 The panel, as the browser rendered it:
@@ -208,16 +223,15 @@ The exchange, as the browser rendered it:
 The screenshot is at `/tmp/askwell-phase2-check/widget.png` — Chromium, headless,
 375 px wide, the page at `http://127.0.0.1:4173/`.
 
-## What the run found: the panel is off the screen
+## What the run found, and what was done about it
 
-Everything above held, and one thing did not: **the panel opens, and it is
-rendered outside the viewport.** The frame sits at `x 359, y 704`, 343 by 480,
-on a screen of 375 by 720 — so the visitor sees a sliver of it and nothing
-else. The screenshot shows it: the page, and a white corner at the bottom
-right.
+The first run of this check failed on one thing: **the panel opened, and it was
+rendered outside the viewport.** The frame sat at `x 359, y 704`, 343 by 480, on
+a screen of 375 by 720 — so the visitor saw a sliver of it and nothing else.
+The screenshot showed it: the page, and a white corner at the bottom right.
 
-The reason is in the loader's stylesheet (`apps/widget/src/loader.ts`). The
-position rules are written as
+The reason was in the loader's stylesheet (`apps/widget/src/loader.ts`). The
+position rules were written as
 
 ```css
 .bottom-right .frame {
@@ -226,21 +240,12 @@ position rules are written as
 }
 ```
 
-and they never match. Inside a shadow root a selector is matched against the
+and they never matched. Inside a shadow root a selector is matched against the
 shadow tree, and the host element is not part of it: the host has the class
-`bottom-right`, but the class is on the _outside_ of the shadow root. The
-rule that matches is
-
-```css
-:host(.bottom-right) .frame {
-  bottom: 0;
-  right: 0;
-}
-```
-
-With no `bottom` and no `right`, the frame is placed at its static position —
-the host's origin, which is the bottom right corner of the screen — and it
-hangs off the screen to the right and below.
+`bottom-right`, but the class is on the _outside_ of the shadow root. With no
+`bottom` and no `right`, the frame was placed at its static position — the
+host's origin, which is the bottom right corner of the screen — and it hung off
+the screen to the right and below.
 
 The proof, in one page: a host with the class `bottom-right` and two frames in
 its shadow root, one under each rule.
@@ -250,5 +255,11 @@ its shadow root, one under each rule.
 :host(.bottom-right) .frame2 -> bottom: 0px    right: 0px
 ```
 
-The fix is the loader's, and it is not in this branch: the check is the
-harness, and the loader was merged in PR #16.
+**The fix is PR #29**, which the four rules address as `:host(.bottom-right)`
+and the three other corners. It is merged: the run above is against a preview
+built from `main` with it, and the frame now sits at `x 16, y 224` with
+`bottom: 0px` and `right: 0px` — inside the viewport, 16px from the edge, the
+margin the button has.
+
+The check asserts it, so the next run says so in one line rather than in a
+screenshot: "the panel is on the screen".
