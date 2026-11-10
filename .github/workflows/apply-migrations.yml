@@ -1,0 +1,167 @@
+# Applies the migrations a push to `main` added.
+#
+# The apply script is the only path to the database (docs/project.md §7). It takes a
+# migration's version, fetches the file from merged main, and writes the row the
+# platform records. Nothing in this file talks to Postgres, and no project is named
+# here: the script resolves the project from packages/db/supabase-projects.json and
+# refuses anything that is not permitted to be written to.
+#
+# The one credential this needs is SUPABASE_ACCESS_TOKEN, a repository secret the
+# product owner adds (Settings -> Secrets and variables -> Actions). Until it is
+# there, this job fails on purpose, with a message that says so.
+name: Apply migrations
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/migrations/**"
+
+# One apply at a time. Two pushes that land close together must not race for the same
+# table, and the second one has to see the first one's row.
+concurrency:
+  group: apply-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Apply the migrations this push added
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          # The whole history: the files this push added are found by diffing the
+          # push's "before" commit against its "after" commit.
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply the migrations this push added
+        env:
+          # The product owner's repository secret. The script needs it, and nothing
+          # else does: no key, no URL, no project.
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # This workflow's own token, so the script can read the repository through
+          # the API without spending the anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_ACCESS_TOKEN}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set. The product owner adds it as a repository secret (Settings -> Secrets and variables -> Actions -> New repository secret). Nothing is applied without it."
+            exit 1
+          fi
+
+          before="${BEFORE_SHA}"
+          after="${AFTER_SHA:-HEAD}"
+
+          if [ -z "${before}" ] || [ "${before}" = "0000000000000000000000000000000000000000" ]; then
+            echo "::error::This push has no 'before' commit, so the files it added cannot be found. Refusing to guess which migrations to apply."
+            exit 1
+          fi
+
+          if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            echo "::error::The 'before' commit ${before} is not in this checkout."
+            exit 1
+          fi
+
+          # A merged migration is never edited, so a migration this push *changed*
+          # rather than added is a mistake worth stopping for: the database already
+          # holds the old bytes under that version, and applying the new ones would
+          # leave the database and main disagreeing. A rename is an edit too, and a
+          # file moved *out* of the directory reads as a deletion here: git pairs the
+          # two sides of a rename only when both of them are in the diff.
+          if ! changed_files="$(git diff --name-only --diff-filter=MRD "${before}" "${after}" -- 'supabase/migrations/**')"; then
+            echo "::error::Could not diff ${before} against ${after}."
+            exit 1
+          fi
+
+          if [ -n "${changed_files}" ]; then
+            echo "::error::This push changes a migration that is already merged:"
+            printf '  %s\n' "${changed_files}"
+            echo "::error::A merged migration is never edited, renamed or removed. Add a new migration file instead."
+            exit 1
+          fi
+
+          # The migration files this push added, in file-name order — the order the
+          # versions sort in, which is the order they are applied in. LC_ALL=C, so the
+          # order is the bytes' order and not the runner's locale's.
+          if ! added_files="$(git diff --name-only --diff-filter=A "${before}" "${after}" -- 'supabase/migrations/**' | LC_ALL=C sort)"; then
+            echo "::error::Could not diff ${before} against ${after}."
+            exit 1
+          fi
+
+          added=()
+
+          if [ -n "${added_files}" ]; then
+            while IFS= read -r file; do
+              added+=("${file}")
+            done <<< "${added_files}"
+          fi
+
+          if [ "${#added[@]}" -eq 0 ]; then
+            echo "This push added no migration file. Nothing to apply."
+            exit 0
+          fi
+
+          echo "This push added ${#added[@]} migration file(s):"
+          printf '  %s\n' "${added[@]}"
+
+          for file in "${added[@]}"; do
+            name="${file##*/}"
+
+            # A migration's version is its own UTC timestamp. The script is given
+            # the version, never a path — a path would let arbitrary SQL be recorded
+            # as a migration.
+            if [[ ! "${name}" =~ ^([0-9]{14})_[A-Za-z0-9_-]+\.sql$ ]]; then
+              echo "::error::The file ${name} is not named <timestamp>_<name>.sql. A migration's version is its own UTC timestamp, so there is no version to apply."
+              exit 1
+            fi
+
+            version="${BASH_REMATCH[1]}"
+
+            # The script records the row's `created_by` from this checkout's git
+            # identity, and the rows already on dev carry the address of the commit
+            # that wrote the migration. A checkout has no identity of its own, so it
+            # is set here — otherwise the first workflow-applied row would be the
+            # first one without an address. It is set for every file, empty and all,
+            # so one migration's author can never be recorded against the next.
+            # The address ends up in supabase_migrations.schema_migrations, so it is
+            # the author's address and not the runner's — the same thing the
+            # platform's own apply records.
+            author="$(git log -1 --format='%ae' -- "${file}")"
+            git config user.email "${author}"
+
+            # The bytes this push reviewed, so the script refuses if the file on
+            # merged main is not the same file.
+            sha256="$(sha256sum "${file}" | cut -d' ' -f1)"
+
+            echo "::group::Applying ${version}"
+            # The script is `packages/db`'s `db:apply`, run from its own package. Not
+            # `pnpm --filter`: a filter that matches no package exits 0 and applies
+            # nothing, and this job must not be able to succeed without applying.
+            (cd packages/db && pnpm db:apply "${version}" --expect-sha256 "${sha256}") || {
+              echo "::endgroup::"
+              echo "::error::db:apply refused ${version}. The job fails on purpose — a refusal must be loud. The reason is above."
+              exit 1
+            }
+            echo "::endgroup::"
+          done

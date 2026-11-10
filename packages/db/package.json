@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
+    "db:apply": "node scripts/apply-migration.mjs",
     "db:types": "node scripts/db-types.mjs",
     "lint": "eslint .",
     "test": "vitest run",
