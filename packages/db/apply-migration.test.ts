@@ -5,8 +5,8 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { applyMigration } from "./scripts/apply-migration.mjs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyMigration, fetchFileOnMain, listFilesOnMain } from "./scripts/apply-migration.mjs";
 import { closeTestDb, createTestDb, query, queryBatch, stubSupabaseRoles } from "./supabase-pglite";
 
 const execFileAsync = promisify(execFile);
@@ -387,5 +387,80 @@ describe("db-types", () => {
         process.env.SUPABASE_PROJECT_ID = before;
       }
     }
+  });
+});
+
+describe("the repository fetches", () => {
+  /** A request the stubbed fetch saw. */
+  type Call = { url: string; headers: Record<string, string> };
+
+  /** Answers every fetch with the body, and records what was asked for. */
+  function stubFetch(body: string): Call[] {
+    const calls: Call[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+        calls.push({ url: String(url), headers: init?.headers ?? {} });
+
+        return new Response(body, { status: 200 });
+      }),
+    );
+
+    return calls;
+  }
+
+  const before = process.env.GITHUB_TOKEN;
+
+  afterEach(() => {
+    if (before === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = before;
+    }
+
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the token when it fetches a file from main", async () => {
+    process.env.GITHUB_TOKEN = "test-token";
+    const calls = stubFetch("select 1;\n");
+
+    const bytes = await fetchFileOnMain(
+      "supabase/migrations/20261110035018_plan_refusal_sqlstate.sql",
+    );
+
+    expect(bytes.toString("utf8")).toBe("select 1;\n");
+    expect(calls[0]?.headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("fetches the file through the contents API, where the listing already works", async () => {
+    process.env.GITHUB_TOKEN = "test-token";
+    const calls = stubFetch("select 1;\n");
+
+    await fetchFileOnMain("supabase/migrations/20261110035018_plan_refusal_sqlstate.sql");
+
+    expect(calls[0]?.url).toContain(
+      "/contents/supabase/migrations/20261110035018_plan_refusal_sqlstate.sql?ref=main",
+    );
+    expect(calls[0]?.headers.Accept).toBe("application/vnd.github.raw");
+  });
+
+  it("sends the token when it lists the migrations on main", async () => {
+    process.env.GITHUB_TOKEN = "test-token";
+    const calls = stubFetch("[]");
+
+    await listFilesOnMain();
+
+    expect(calls[0]?.headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("fetches without a token when there is none", async () => {
+    delete process.env.GITHUB_TOKEN;
+    const calls = stubFetch("select 1;\n");
+
+    await fetchFileOnMain("supabase/migrations/20261110035018_plan_refusal_sqlstate.sql");
+
+    expect(calls[0]?.headers.Authorization).toBeUndefined();
   });
 });

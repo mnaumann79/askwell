@@ -315,18 +315,31 @@ async function authorEmail() {
   }
 }
 
-/** The migration files on merged main. */
-async function listFilesOnMain() {
-  const { owner, repo } = await repositorySlug();
-  const headers = { Accept: "application/vnd.github+json" };
+/**
+ * The headers every call to the repository carries.
+ *
+ * The token is what makes a private repository readable. Without it the API
+ * answers a private repository's contents with 404, and the runner has no proxy
+ * to inject credentials for us — the sandbox has, and that is why the missing
+ * header went unnoticed until the first dispatch on the runner.
+ */
+function repositoryHeaders(accept) {
+  const headers = { Accept: accept };
 
   if (process.env.GITHUB_TOKEN) {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
+  return headers;
+}
+
+/** The migration files on merged main. */
+export async function listFilesOnMain() {
+  const { owner, repo } = await repositorySlug();
+
   const response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/contents/${MIGRATIONS_DIRECTORY}?ref=main`,
-    { headers },
+    { headers: repositoryHeaders("application/vnd.github+json") },
   );
 
   if (!response.ok) {
@@ -340,11 +353,23 @@ async function listFilesOnMain() {
   return entries.map((entry) => entry.name);
 }
 
-/** The bytes of a file on merged main. */
-async function fetchFileOnMain(filePath) {
+/**
+ * The bytes of a file on merged main.
+ *
+ * The fetch goes through the contents API — the same endpoint the listing uses,
+ * and the one whose authentication is known to work on the runner, where the
+ * listing succeeded and the anonymous raw fetch did not.
+ *
+ * The raw media type asks for the file's bytes rather than the `content`
+ * field, which the API only returns for files up to 1 MB. A migration is
+ * 9,890 bytes today, and the raw media type is not that limit.
+ */
+export async function fetchFileOnMain(filePath) {
   const { owner, repo } = await repositorySlug();
+
   const response = await fetch(
-    `https://raw.githubusercontent.com/${owner}/${repo}/main/${filePath}`,
+    `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=main`,
+    { headers: repositoryHeaders("application/vnd.github.raw") },
   );
 
   if (!response.ok) {
