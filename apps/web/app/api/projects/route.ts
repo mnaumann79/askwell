@@ -1,9 +1,10 @@
-import { createProjectRequestSchema } from "@askwell/shared";
+import { createProjectRequestSchema, PLAN_LIMITS } from "@askwell/shared";
 import { auth } from "@clerk/nextjs/server";
 import { errorResponse, internalErrorResponse } from "../../../lib/projects/errors";
 import {
   createProject,
   getOwnerPlan,
+  limitReachedMessage,
   listProjects,
   ProjectsError,
 } from "../../../lib/projects/projects";
@@ -49,6 +50,17 @@ export async function POST(request: Request): Promise<Response> {
     // The plan is read on the server, never taken from the request (§9).
     const ownerClient = await createOwnerClient();
     const plan = await getOwnerPlan(ownerClient, userId);
+
+    // The limit is checked here as well as in the function. create_project
+    // raises PT001 when the owner is at the limit and keeps the atomic check
+    // on the account row, but the Data API answers a raised SQLSTATE with a
+    // 502 and no error code, so the route never sees that refusal itself.
+    // This check is what turns "the owner is at the limit" into a 402.
+    const projects = await listProjects(ownerClient);
+
+    if (projects.length >= PLAN_LIMITS[plan].projects) {
+      return errorResponse("payment_required", limitReachedMessage(plan));
+    }
 
     // create_project may only be run by the server. The owner id comes from
     // the session, not from the request.

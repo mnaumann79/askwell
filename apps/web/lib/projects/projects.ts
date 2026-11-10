@@ -56,6 +56,16 @@ function planLabel(plan: Plan): string {
 }
 
 /**
+ * The message that goes with a refused project: how many the plan allows and
+ * that Pro allows more (§6.3).
+ */
+export function limitReachedMessage(plan: Plan): string {
+  const limit = PLAN_LIMITS[plan].projects;
+
+  return `The ${planLabel(plan)} plan allows ${limit} ${limit === 1 ? "project" : "projects"}. Pro allows ${PLAN_LIMITS.pro.projects} — upgrade to Pro for more.`;
+}
+
+/**
  * The owner's projects.
  *
  * The read goes through the owner client, so RLS scopes it to the rows of the
@@ -118,11 +128,7 @@ export async function createProject(
 
   if (error) {
     if (error.code === "PT001") {
-      const limit = PLAN_LIMITS[plan].projects;
-      throw new ProjectsError(
-        "limit_reached",
-        `The ${planLabel(plan)} plan allows ${limit} ${limit === 1 ? "project" : "projects"}. Pro allows ${PLAN_LIMITS.pro.projects} — upgrade to Pro for more.`,
-      );
+      throw new ProjectsError("limit_reached", limitReachedMessage(plan));
     }
 
     if (error.code === "PT004") {

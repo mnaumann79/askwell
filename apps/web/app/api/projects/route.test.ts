@@ -164,4 +164,36 @@ describe("POST /api/projects", () => {
     expect(body.error.message).toContain("1 project");
     expect(body.error.message).toContain("Pro allows 5");
   });
+
+  it("answers 402 when the owner already has as many projects as the plan allows", async () => {
+    // The Data API answers the PT001 of the function with a 502 and no error
+    // code, so the route counts the projects of the owner itself and refuses
+    // before it calls the function.
+    fake = fakeSupabase({
+      select: (call) =>
+        call.table === "accounts" ? { data: { plan: "free" } } : { data: [PROJECT_ROW] },
+      rpc: () => ({ data: PROJECT_ROW }),
+    });
+    createOwnerClientMock.mockResolvedValue(fake.client);
+    createServiceClientMock.mockReturnValue(fake.client);
+
+    const response = await POST(postRequest({ name: "Acme" }));
+
+    expect(response.status).toBe(402);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("payment_required");
+    expect(body.error.message).toContain("1 project");
+    expect(body.error.message).toContain("Pro allows 5");
+    expect(fake.calls.filter((call) => call.operation === "rpc")).toHaveLength(0);
+  });
+
+  it("reads the projects of the owner through the owner client, so RLS counts only its own", async () => {
+    await POST(postRequest({ name: "Acme" }));
+
+    const call = fake.calls.find(
+      (entry) => entry.operation === "select" && entry.table === "projects",
+    );
+    expect(call).toBeDefined();
+    expect(call?.filters).toEqual({});
+  });
 });
