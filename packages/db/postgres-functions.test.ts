@@ -365,7 +365,10 @@ describe("the postgres functions", () => {
 
     it("refuses a conversation that belongs to another project", async () => {
       const other = await createProject(OWNER, "Other conversations", 10);
-      const conversation = await query<{ id: string }>(db, "select id from public.conversations limit 1");
+      const conversation = await query<{ id: string }>(
+        db,
+        "select id from public.conversations limit 1",
+      );
 
       await expect(
         query(db, "select public.save_chat_turn($1, $2, $3, $4, $5)", [
