@@ -21,7 +21,7 @@ export type NavSection = {
  */
 export const SECTIONS: NavSection[] = [
   { label: "Overview", href: DASHBOARD_URL },
-  { label: "Projects" },
+  { label: "Projects", href: `${DASHBOARD_URL}/projects` },
   { label: "Knowledge" },
   { label: "Conversations" },
   { label: "Customize" },
