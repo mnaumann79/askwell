@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { configUrl, loadSettings, panelUrl, readPublicKey } from "./config";
 
-function element(attributes: Record<string, string>): { getAttribute(name: string): string | null } {
+function element(attributes: Record<string, string>): {
+  getAttribute(name: string): string | null;
+} {
   return {
     getAttribute(name: string) {
       return attributes[name] ?? null;
@@ -61,7 +63,10 @@ describe("the config", () => {
   it("is read from the route", async () => {
     const fetchImpl = vi.fn(async () => response(200, { config: SETTINGS }));
 
-    const settings = await loadSettings("https://app.example.com/api/widget/config?key=pk_abc", fetchImpl);
+    const settings = await loadSettings(
+      "https://app.example.com/api/widget/config?key=pk_abc",
+      fetchImpl,
+    );
 
     expect(settings).toEqual(SETTINGS);
     expect(fetchImpl).toHaveBeenCalledOnce();
