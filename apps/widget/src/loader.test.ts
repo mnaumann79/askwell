@@ -109,6 +109,31 @@ describe("the loader", () => {
     expect(host?.getAttribute("style")).toContain("right: 16px");
   });
 
+  it("addresses the host in the position rules, so the panel can be placed", async () => {
+    const shadow = captureShadow();
+    scriptTag(KEY);
+
+    init();
+    await vi.waitFor(() => expect(shadow.current).not.toBeNull());
+
+    const style = shadow.current?.querySelector("style")?.textContent ?? "";
+
+    // The host carries the position as its class, and the host is not part of
+    // the shadow tree: a descendant selector cannot match it, and the frame
+    // would keep no offsets and open outside the viewport.
+    const corners: Record<string, string> = {
+      "bottom-right": "bottom:0;right:0",
+      "bottom-left": "bottom:0;left:0",
+      "top-right": "top:0;right:0",
+      "top-left": "top:0;left:0",
+    };
+
+    for (const [corner, offsets] of Object.entries(corners)) {
+      expect(style).toContain(`:host(.${corner}) .frame{${offsets}}`);
+      expect(style).not.toContain(`.${corner} .frame{`);
+    }
+  });
+
   it("opens the panel on the same origin with the configured animation", async () => {
     const shadow = captureShadow();
     scriptTag(KEY);

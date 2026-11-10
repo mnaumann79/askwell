@@ -5,10 +5,10 @@
 .dot{position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#e5484d;display:none}
 .unread .dot{display:block}
 .frame{position:absolute;width:min(360px,calc(100vw - 32px));height:480px;border:0;border-radius:12px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.25);overflow:hidden}
-.bottom-right .frame{bottom:0;right:0}
-.bottom-left .frame{bottom:0;left:0}
-.top-right .frame{top:0;right:0}
-.top-left .frame{top:0;left:0}
+:host(.bottom-right) .frame{bottom:0;right:0}
+:host(.bottom-left) .frame{bottom:0;left:0}
+:host(.top-right) .frame{top:0;right:0}
+:host(.top-left) .frame{top:0;left:0}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes slide{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
 @keyframes scale{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
