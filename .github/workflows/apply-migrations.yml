@@ -86,8 +86,8 @@ jobs:
           # A merged migration is never edited, so a migration this push *changed*
           # rather than added is a mistake worth stopping for: the database already
           # holds the old bytes under that version, and applying the new ones would
-          # leave the database and main disagreeing.
-          if ! changed_files="$(git diff --name-only --diff-filter=M "${before}" "${after}" -- 'supabase/migrations/**')"; then
+          # leave the database and main disagreeing. A rename is an edit too.
+          if ! changed_files="$(git diff --name-only --diff-filter=MR "${before}" "${after}" -- 'supabase/migrations/**')"; then
             echo "::error::Could not diff ${before} against ${after}."
             exit 1
           fi
@@ -135,6 +135,17 @@ jobs:
             fi
 
             version="${BASH_REMATCH[1]}"
+
+            # The script records the row's `created_by` from this checkout's git
+            # identity, and the rows already on dev carry the address of the commit
+            # that wrote the migration. A checkout has no identity of its own, so it
+            # is set here — otherwise the first workflow-applied row would be the
+            # first one without an address.
+            author="$(git log -1 --format='%ae' -- "${file}")"
+
+            if [ -n "${author}" ]; then
+              git config user.email "${author}"
+            fi
 
             # The bytes this push reviewed, so the script refuses if the file on
             # merged main is not the same file.
