@@ -1,0 +1,57 @@
+# The four checks, on every pull request.
+#
+# Nothing in the repository reads a secret at build time, so this workflow has
+# no secret and no environment variable: it reads the repository, installs it
+# and runs the commands the project already uses. If a step ever seems to need
+# one, that is a finding to report, not a value to add here.
+#
+# The versions come from the repository too — `packageManager` and
+# `engines.node` in package.json — so the workflow and the project cannot drift
+# apart.
+#
+# It applies no migration and touches no database: `supabase/migrations/**` is
+# applied by the other workflow, on `main`, and only there.
+name: CI
+
+on:
+  pull_request:
+
+# The workflow must not be able to write.
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: The four checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
