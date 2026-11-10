@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { widgetConfigSchema } from "../widget-config";
+import { HEX_COLOR_PATTERN, widgetConfigSchema } from "../widget-config";
 import { MAX_MESSAGE_CHARACTERS, PUBLIC_KEY_PATTERN } from "./limits";
 
 /**
@@ -41,7 +41,7 @@ export type WidgetChatResponse = z.infer<typeof widgetChatResponseSchema>;
 
 /** `PATCH /api/projects/:id/config` — the owner customizes the widget. */
 export const widgetConfigUpdateRequestSchema = z.object({
-  buttonColor: z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i),
+  buttonColor: z.string().regex(HEX_COLOR_PATTERN),
   position: widgetConfigSchema.shape.position,
   label: z.string().trim().min(1).max(50),
   animation: widgetConfigSchema.shape.animation,
