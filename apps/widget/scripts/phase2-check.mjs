@@ -551,7 +551,7 @@ async function main() {
       const geometry = await client.send("Runtime.callFunctionOn", {
         objectId: object.objectId,
         functionDeclaration:
-          "function () { const r = this.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }",
+          "function () { const r = this.getBoundingClientRect(); const s = getComputedStyle(this); return { x: r.x, y: r.y, width: r.width, height: r.height, position: s.position, bottom: s.bottom, right: s.right }; }",
         returnByValue: true,
       });
 
