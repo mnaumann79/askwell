@@ -1,21 +1,32 @@
 /**
- * Askwell widget loader (docs/project.md §6.5).
+ * The public surface of the loader package.
  *
- * This file runs on the customer's own website, so it has to stay small (under
- * 5 kb), dependency free and free of any global CSS.
- *
- * Phase 0 placeholder. The real loader reads `data-key` from its script tag,
- * fetches the widget config, renders the button inside a shadow root and opens
- * the panel in an iframe. That behavior arrives in Phase 2 — see §6.5 for the
- * contract this file has to meet.
+ * The bundle that a customer's website loads is built from `main.ts`; this
+ * module is what the app imports (types only) and what the tests use.
  */
 
-/**
- * Entry point of the loader.
- *
- * Does nothing yet. It exists so the bundle, the size check and the build
- * pipeline are in place before the loader has behavior.
- */
-export function init(): void {
-  // Phase 2: read `data-key`, fetch the config, render the button, open the iframe.
-}
+export {
+  configUrl,
+  loadSettings,
+  panelUrl,
+  readPublicKey,
+  type WidgetAnimation,
+  type WidgetPosition,
+  type WidgetSettings,
+} from "./config";
+export {
+  handleWidgetMessage,
+  init,
+  mountWidget,
+  type WidgetMessageEvent,
+  type WidgetView,
+} from "./loader";
+export {
+  isWidgetMessage,
+  WIDGET_CLOSE,
+  WIDGET_OPEN,
+  WIDGET_READY,
+  WIDGET_RESIZE,
+  WIDGET_UNREAD,
+  type WidgetMessage,
+} from "./protocol";
