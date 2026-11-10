@@ -42,6 +42,26 @@ const MIGRATION_FILE_PATTERN = /^\d{14}_[A-Za-z0-9_-]+\.sql$/;
 const MIGRATIONS_DIRECTORY = "supabase/migrations";
 
 /**
+ * The refusal for a version that is not a version.
+ *
+ * Checked before anything is fetched or asked of the project: a wrong argument
+ * must not cost a network call, and must never reach the database.
+ *
+ * @param {string} version
+ * @returns {Refusal | null}
+ */
+function checkVersion(version) {
+  if (!VERSION_PATTERN.test(version)) {
+    return refuse(
+      "invalid-version",
+      `"${version}" is not a version. It is the migration file's own UTC timestamp, e.g. 20261110035018.`,
+    );
+  }
+
+  return null;
+}
+
+/**
  * The migration file for the version, among the files on merged main.
  *
  * The caller names a version, never a path: a path would let arbitrary SQL be
@@ -52,11 +72,10 @@ const MIGRATIONS_DIRECTORY = "supabase/migrations";
  * @returns {FileResolution}
  */
 export function findMigrationFile(files, version) {
-  if (!VERSION_PATTERN.test(version)) {
-    return refuse(
-      "invalid-version",
-      `"${version}" is not a version. It is the migration file's own UTC timestamp, e.g. 20261110035018.`,
-    );
+  const badVersion = checkVersion(version);
+
+  if (badVersion) {
+    return badVersion;
   }
 
   const matches = files.filter(
@@ -109,19 +128,50 @@ function dollarTag(sql) {
 }
 
 /**
+ * A text value, quoted for SQL.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function quoteText(value) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
  * The statement that records the row the platform records.
  *
  * The insert and the hash are one statement, so the hash that comes back is the hash
  * of the row the database stored — there is no window between the write and the check.
  */
-export function buildInsertStatement({ version, name, sql }) {
+export function buildInsertStatement({ version, name, sql, createdBy }) {
   const tag = dollarTag(sql);
+  const author = createdBy ? quoteText(createdBy) : "null";
 
   return `with inserted as (
-  insert into supabase_migrations.schema_migrations (version, name, statements)
-  values ('${version}', '${name}', array[${tag}${sql}${tag}])
+  insert into supabase_migrations.schema_migrations (version, name, statements, created_by)
+  values ('${version}', '${name}', array[${tag}${sql}${tag}], ${author})
   returning version, name, md5(statements[1]) as stmt_md5, octet_length(statements[1]) as stmt_bytes
 ) select * from inserted`;
+}
+
+/**
+ * The batch that applies the migration and records it.
+ *
+ * The migration's own SQL comes first, the insert second, in one call. The Management
+ * API runs a multi-statement string as one batch in one transaction: a statement that
+ * raises fails the whole call, so the migration and the row land together or not at
+ * all. The last statement's result is what comes back — and the last statement is
+ * the insert, so the hash is the hash of the row the database stored.
+ *
+ * @param {{ version: string; name: string; sql: string; createdBy?: string | null }} options
+ * @returns {string}
+ */
+export function buildApplyBatch({ version, name, sql, createdBy }) {
+  const insert = buildInsertStatement({ version, name, sql, createdBy });
+
+  // The `;` sits on its own line, so it ends the migration's last statement even
+  // when that line is a comment.
+  return `${sql.trimEnd()}\n;\n${insert}`;
 }
 
 /**
@@ -135,6 +185,7 @@ export function buildInsertStatement({ version, name, sql }) {
  *   operation?: string,
  *   version: string,
  *   expectSha256?: string,
+ *   createdBy?: string | null,
  *   listFiles: () => Promise<string[]>,
  *   fetchFile: (filePath: string) => Promise<Buffer>,
  *   query: (ref: string, sql: string) => Promise<Record<string, unknown>[]>,
@@ -146,10 +197,19 @@ export async function applyMigration({
   operation = MIGRATIONS_OPERATION,
   version,
   expectSha256,
+  createdBy = null,
   listFiles,
   fetchFile,
   query,
 }) {
+  // The argument is checked first: a version that is not a version never gets
+  // to the listing, and never gets to the project.
+  const badVersion = checkVersion(version);
+
+  if (badVersion) {
+    return badVersion;
+  }
+
   const target = resolveTarget(projects, operation, process.env.SUPABASE_PROJECT_ID);
 
   if (!target.ok) {
@@ -190,12 +250,14 @@ export async function applyMigration({
     );
   }
 
-  const statement = buildInsertStatement({
+  const statement = buildApplyBatch({
     version,
     name: file.name.slice(`${version}_`.length, -".sql".length),
     sql: bytes.toString("utf8"),
+    createdBy,
   });
 
+  // One call: the migration runs and the row is recorded, or neither happens.
   const inserted = await query(target.ref, statement);
   const row = inserted[0];
 
@@ -230,6 +292,23 @@ async function repositorySlug() {
   }
 
   return { owner: match[1], repo: match[2] };
+}
+
+/**
+ * The address the platform's own apply records as `created_by`.
+ *
+ * The rows already on dev carry it; a row without it would be the first one, and
+ * the table would stop being uniform for whoever reads it later.
+ *
+ * @returns {Promise<string | null>}
+ */
+async function authorEmail() {
+  try {
+    const { stdout } = await execFileAsync("git", ["config", "user.email"], { cwd: repoRoot });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 /** The migration files on merged main. */
@@ -343,17 +422,29 @@ async function main(argv) {
 
   const projects = await readProjects();
 
-  const result = await applyMigration({
-    projects,
-    version: parsed.version,
-    expectSha256: parsed.expectSha256,
-    listFiles: listFilesOnMain,
-    fetchFile: fetchFileOnMain,
-    query: queryProject(),
-  });
+  let result;
+
+  try {
+    result = await applyMigration({
+      projects,
+      version: parsed.version,
+      expectSha256: parsed.expectSha256,
+      createdBy: await authorEmail(),
+      listFiles: listFilesOnMain,
+      fetchFile: fetchFileOnMain,
+      query: queryProject(),
+    });
+  } catch (error) {
+    // The network or the project refused. The message already says `db:apply:`,
+    // so the caller gets one line on stderr and a non-zero exit.
+    console.error(error.message);
+    process.exit(1);
+  }
 
   if (!result.ok) {
-    console.error(`db:apply: ${result.message}`);
+    // The reason is the machine-readable half: a workflow can branch on it, and
+    // the message after it is the half a human reads.
+    console.error(`db:apply: ${result.reason}: ${result.message}`);
     process.exit(1);
   }
 

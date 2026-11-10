@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applyMigration } from "./scripts/apply-migration.mjs";
-import { closeTestDb, createTestDb, query, stubSupabaseRoles } from "./supabase-pglite";
+import { closeTestDb, createTestDb, query, queryBatch, stubSupabaseRoles } from "./supabase-pglite";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,6 +49,17 @@ beforeAll(async () => {
       rollback text[]
     );
   `);
+
+  // Every migration but the one under test, oldest first: the tables the
+  // migration's functions read have to exist, and the functions have to be the
+  // ones the earlier migration left.
+  for (const file of await migrationFiles()) {
+    if (file === FILE) {
+      continue;
+    }
+
+    await db.exec(await readFile(path.join(migrationsDirectory, file), "utf8"));
+  }
 });
 
 afterAll(async () => {
@@ -62,6 +73,11 @@ beforeEach(async () => {
 /** The migration files, as they are on disk — the listing the script reads. */
 async function listFilesFromDisk(): Promise<string[]> {
   return (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql"));
+}
+
+/** The migration files on disk, oldest first. */
+async function migrationFiles(): Promise<string[]> {
+  return (await listFilesFromDisk()).sort();
 }
 
 /** The bytes of a file on merged main — here, the bytes on disk. */
@@ -83,9 +99,15 @@ async function recordedCount(): Promise<number> {
   return Number(row.n);
 }
 
-/** Runs a statement against the test database. The ref is not used. */
+/**
+ * Runs a batch against the test database. The ref is not used.
+ *
+ * A batch is what the script sends — the migration's SQL and the insert in one
+ * call — so the test runs it the same way and takes the last statement's result,
+ * which is the insert's.
+ */
 function queryPglite() {
-  return async (_ref: string, sql: string) => query(db, sql);
+  return async (_ref: string, sql: string) => queryBatch(db, sql);
 }
 
 function apply(overrides: Partial<Parameters<typeof applyMigration>[0]> = {}) {
@@ -100,6 +122,53 @@ function apply(overrides: Partial<Parameters<typeof applyMigration>[0]> = {}) {
 }
 
 describe("apply-migration", () => {
+  describe("what it does to the database", () => {
+    it("applies the migration, not only records it", async () => {
+      // Dropped first, so the assertion cannot pass on a function an earlier
+      // test left behind.
+      await db.exec("drop function if exists public.create_project(text, text, integer, jsonb)");
+
+      const gone = await query(
+        db,
+        "select count(*)::int as n from pg_proc where proname = 'create_project' and pronamespace = 'public'::regnamespace",
+      );
+      expect(gone[0]?.n).toBe(0);
+
+      const result = await apply();
+
+      if (!result.ok) {
+        throw new Error(`expected the apply to succeed: ${result.message}`);
+      }
+
+      // The effect: the function is on the server, and the refusal it raises
+      // travels as P0001 — the SQLSTATE the Data API can deliver. The earlier
+      // migration raised PT004, which it cannot.
+      const functions = await query(
+        db,
+        "select prosrc from pg_proc where proname = 'create_project' and pronamespace = 'public'::regnamespace",
+      );
+
+      expect(functions).toHaveLength(1);
+      expect(functions[0]?.prosrc).toContain("errcode = 'P0001'");
+      expect(functions[0]?.prosrc).toContain("hint = 'plan_limit_projects'");
+      expect(functions[0]?.prosrc).not.toContain("PT004");
+    });
+
+    it("records nothing when the migration itself fails", async () => {
+      const broken = {
+        version: "20261110130500",
+        listFiles: async () => ["20261110130500_broken.sql"],
+        fetchFile: async () => Buffer.from("select 1/0;\n"),
+      };
+
+      // The batch fails as a whole, so the call rejects.
+      await expect(apply(broken)).rejects.toThrow();
+
+      // The migration and the row land together or not at all.
+      expect(await recordedCount()).toBe(0);
+    });
+  });
+
   describe("the project it writes to", () => {
     it("records the row the platform records: the version, the name and the file's bytes", async () => {
       const result = await apply();
@@ -132,6 +201,22 @@ describe("apply-migration", () => {
       const file = await readFile(path.join(migrationsDirectory, FILE));
       expect(row.stmt_md5).toBe(createHash("md5").update(file).digest("hex"));
       expect(row.stmt_bytes).toBe(file.length);
+    });
+
+    it("records who applied it, the way the platform's own apply does", async () => {
+      const result = await apply({ createdBy: "mnaumann79@gmail.com" });
+
+      if (!result.ok) {
+        throw new Error(`expected the apply to succeed: ${result.message}`);
+      }
+
+      const rows = await query(
+        db,
+        "select created_by from supabase_migrations.schema_migrations",
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.created_by).toBe("mnaumann79@gmail.com");
     });
 
     it("refuses when no project permits the operation", async () => {
@@ -264,6 +349,26 @@ describe("apply-migration", () => {
       // Still one row: a duplicate trigger does not double-apply.
       expect(await recordedCount()).toBe(1);
     });
+  });
+});
+
+describe("the command line", () => {
+  it("prints the reason of a refusal and exits non-zero", async () => {
+    // A version that is not a version is refused before anything is fetched, so
+    // this command touches neither the network nor the project.
+    const failure = await execFileAsync(
+      "node",
+      [path.join(packageDir, "scripts", "apply-migration.mjs"), "notaversion"],
+      { env: { ...process.env, SUPABASE_ACCESS_TOKEN: "test-token" } },
+    ).then(
+      () => {
+        throw new Error("expected the command to fail");
+      },
+      (reason: { code?: number; stderr: string }) => reason,
+    );
+
+    expect(failure.code).toBe(1);
+    expect(failure.stderr).toContain("db:apply: invalid-version:");
   });
 });
 
