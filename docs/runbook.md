@@ -122,6 +122,43 @@ For the raised SQLSTATE the first command answers `502 110`, and `sha256sum body
 `headers.txt` holds both status lines — the `HTTP/1.0 200 Connection established` of the proxy and the
 app's answer below it.
 
+**The deployed functions.** A file can say one thing and the database another; `prosrc` cannot. This counts
+the raises, the SQLSTATEs and the hints off the functions that are deployed on dev, not off a migration
+file:
+
+```sql
+select p.proname,
+       (select count(*)
+          from unnest(string_to_array(p.prosrc, chr(10))) l
+         where l like '%raise exception%') as raises,
+       h.codes,
+       h.hints
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral (
+    select (select array_agg(distinct m[1])
+              from regexp_matches(p.prosrc, 'errcode = ''([A-Z0-9]+)''', 'g') m) as codes,
+           (select array_agg(distinct m[1])
+              from regexp_matches(p.prosrc, 'hint = ''([^'']+)''', 'g') m) as hints
+  ) h
+ where n.nspname = 'public'
+   and p.proname in ('create_project', 'reserve_knowledge_source', 'consume_message', 'save_chat_turn', 'match_chunks')
+ order by p.proname
+```
+
+Run it against askwell-dev — `execute_sql` of the Supabase MCP, or the SQL editor. It answers:
+
+| `proname`                  | `raises` | `codes`   | `hints`                                         |
+| -------------------------- | -------- | --------- | ----------------------------------------------- |
+| `consume_message`          | 2        | `{P0001}` | `{no_account_or_project, quota_exceeded}`       |
+| `create_project`           | 2        | `{P0001}` | `{no_account_or_project, plan_limit_projects}`  |
+| `match_chunks`             | 0        | —         | —                                               |
+| `reserve_knowledge_source` | 2        | `{P0001}` | `{no_account_or_project, plan_limit_knowledge}` |
+| `save_chat_turn`           | 1        | `{P0001}` | `{no_conversation}`                             |
+
+Seven raises, every one of them `P0001`, and the five hint tokens of §1.5 are all in there. `match_chunks`
+raises nothing — that is what makes it the control in §1.2.
+
 ### 1.4 What it means
 
 PostgREST picks the HTTP status from the **SQLSTATE** of the error:
@@ -164,20 +201,46 @@ refusal it was written to map.
    project → 404 `not_found`, everything else → 500 `internal_error`. The 400 the Data API answers is
    never passed on; the route builds its own answer from the hint. Treat the hint as a closed set.
 
-**Pending measurement.** The _after_ side — that the same call answers **400** with `code: P0001` and the
-`hint` — has **not** been measured yet. It waits on the migration being applied to dev (P1F-T10). Until
-that number lands, the after-shape rests on PostgREST's documented behaviour, and this runbook does not
-claim it as a measurement.
+**The after-shape, measured.** The _after_ side — the same call, the same project, the same service key, the
+same body — answers **400** once the refusals raise `P0001`:
+
+| Fact                    | Value                                                              |
+| ----------------------- | ------------------------------------------------------------------ |
+| status                  | `400`                                                              |
+| `content-type`          | `application/json; charset=utf-8`                                  |
+| body                    | **103 bytes**, no trailing newline                                 |
+| body sha256             | `0d5b382837fc047f5afd931a42bee7c6174e290ad5b529cf419555ea082e5b8f` |
+| `code`                  | `P0001`                                                            |
+| `hint`                  | `plan_limit_projects`                                              |
+| `details`               | `null`                                                             |
+| `x-envoy-attempt-count` | `1`                                                                |
+
+The body is JSON and it parses — all four fields are there. It is **one line**, and the 103 bytes and the
+sha256 are exactly that line:
+
+```
+{"code":"P0001","details":null,"hint":"plan_limit_projects","message":"project limit reached for plan"}
+```
+
+`proxy-status: PostgREST; error=P0001` is PostgREST naming the SQLSTATE itself, and **one** attempt where
+the before-shape needed six: the answer is deliverable now, so the gateway never has to retry it. The
+`hint` is read off the response, not assumed — it is what tells the project-limit refusal from the
+`no_account_or_project` one.
+
+Measured on askwell-dev on 2026-11-10, after `20261110024949` and `20261110035018` were applied to it. The
+bytes and the sha256 are in [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242).
 
 ---
 
 ## 2. Where these facts live
 
-| Fact                                                         | Where                                                                                    |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| The refusals now raise `P0001` with the reason in the `hint` | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql`                           |
-| The measured facts, carried in a migration's comment         | the file P1F-T12 produces, `20261110130500_plan_refusal_comment_correction.sql` (PR #14) |
-| The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                          |
+| Fact                                                         | Where                                                                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| The refusals now raise `P0001` with the reason in the `hint` | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql`                                                    |
+| The measured facts, carried in a migration's comment         | the file P1F-T12 produces, `20261110130500_plan_refusal_comment_correction.sql` (PR #14)                          |
+| The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                                                   |
+| The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242) |
+| What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                          |
 
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
 A merged migration is never edited, so it stays wrong on purpose and this runbook is the correction.
