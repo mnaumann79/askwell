@@ -3,8 +3,8 @@
 How to recognise, measure and answer the failures we hit on the Supabase Data API.
 
 Every number here was measured on **askwell-dev** (`wpvdyclozjjnghrcafpf`) on **2026-11-10**, four times
-over — Dwight's (PR #12), the lead's (PR #12's comment) and again today, and Jim's — byte for byte
-identical.
+over in four sandboxes — Jim's (the run behind PR #12), Dwight's, and the lead's twice (behind PR #12's
+comment and again today) — byte for byte identical.
 
 ---
 
