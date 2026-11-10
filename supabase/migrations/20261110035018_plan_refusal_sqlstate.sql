@@ -18,10 +18,12 @@
 -- for the class `PT` where **the digits after `PT` are the HTTP status**:
 -- `PT001` means status 1, `PT402` means 402. `PT001` is not a status that
 -- exists - HTTP statuses run from 100 to 599 - so the response cannot be
--- delivered, and the API gateway answers 502 "upstream connect error or
--- disconnect/reset before headers" with an empty body and no code. That 502
--- carries `x-envoy-attempt-count: 6`, so the upstream was retried six times
--- before the connection was reset.
+-- delivered: the API gateway answers 502 "upstream connect error or
+-- disconnect/reset before headers" with an empty body and no code, after six
+-- attempts (`x-envoy-attempt-count: 6`) and a reset reason of "protocol
+-- error" - the upstream sent a status line the gateway could not parse. A
+-- 500 would have been returned to the client with the code in the body, so
+-- this is not that branch's fallback.
 --
 -- The refusals therefore raise `P0001`, which is the SQLSTATE of a deliberate
 -- raise. PostgREST maps it to 400 and hands the code, the message, the
