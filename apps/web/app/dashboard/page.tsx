@@ -10,6 +10,11 @@ import { SIGN_IN_URL } from "../../lib/clerk/urls";
  * Signing in for the first time creates the owner's `accounts` row. That
  * happens inside `getOrCreateAccount`, on the server, with the user id from
  * the Clerk session.
+ *
+ * The row is read through the owner client, so RLS scopes the read to this
+ * owner, and written through the service client, which is the only client
+ * allowed to insert (docs/project.md §7). The user id is never taken from
+ * anything the browser sends.
  */
 export default async function DashboardPage() {
   const { userId } = await auth.protect({ unauthenticatedUrl: SIGN_IN_URL });
