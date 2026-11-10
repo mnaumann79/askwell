@@ -12,22 +12,19 @@
 --   23502 (a not-null violation inside the body) 400, the code is intact
 --   PT001 / PT002 / PT003 / PT004                502, empty body, no code
 --
--- So the class of the SQLSTATE is what matters, not the place it is raised:
--- PostgREST reads the SQLSTATE of the error and picks the HTTP status from
--- it. It has entries for class 22 and class 23 and maps them to 400, and it
--- has an entry for the class `PT` where **the digits after `PT` are the HTTP
--- status**. `PT001` means status 1, `PT002` status 2 - not statuses that
--- exist, so the lookup fails and PostgREST falls back to 5xx. The Supabase
--- API gateway then treats that 5xx from PostgREST as a retryable upstream
--- error, retries it, and resets the connection. That is the 502.
+-- So the SQLSTATE is what matters, not the place the exception is raised:
+-- PostgREST picks the HTTP status from the SQLSTATE of the error. It has an
+-- exact entry for `P0001` - 400, the default code for a raise - and a branch
+-- for the class `PT` where **the digits after `PT` are the HTTP status**:
+-- `PT001` means status 1, `PT402` means 402. `PT001` is not a status that
+-- exists, so that branch ends on 5xx, and the Supabase API gateway treats a
+-- 5xx from PostgREST as a retryable upstream error, retries it and resets
+-- the connection. That is the 502.
 --
 -- The refusals therefore raise `P0001`, which is the SQLSTATE of a deliberate
 -- raise. PostgREST maps it to 400 and hands the code, the message, the
--- details and the hint through - measured on askwell-dev on 2026-11-10, with
--- a function that raises `P0001` answering:
---
---   {"code":"P0001","message":"I refuse!","details":"Pretty simple",
---    "hint":"There is nothing you can do."}
+-- details and the hint through: the code is the SQLSTATE, the message is the
+-- raise text, the details are the DETAIL and the hint is the HINT.
 --
 -- The machine-readable reason rides in the `hint`:
 --
