@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * The empty state for a dashboard section that has nothing in it yet
- * (docs/project.md §13: every screen has an empty state).
+ * (docs/project.md §13: every screen has an empty state). 
  */
 export function EmptyState({
   title,
