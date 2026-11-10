@@ -54,6 +54,7 @@
 --   plan_limit_knowledge     the plan does not allow another knowledge source
 --   quota_exceeded           the plan does not allow another message this month
 --   no_account_or_project    there is no account or no project for the caller
+--   no_conversation          the conversation belongs to another project
 --
 -- The route maps the hint to the error code of the shared contract
 -- (packages/shared/src/api/errors.ts): the two plan limits answer 409
