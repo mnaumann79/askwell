@@ -159,6 +159,40 @@ Run it against askwell-dev — `execute_sql` of the Supabase MCP, or the SQL edi
 Seven raises, every one of them `P0001`, and the five hint tokens of §1.5 are all in there. `match_chunks`
 raises nothing — that is what makes it the control in §1.2.
 
+**Who may execute them.** A refusal is called by the route with the service key, so `service_role` is the only
+role that may execute it — the visitor must not be able to call the function that refuses them. The check has
+to be **per entry**, because a grant to `PUBLIC` is written with an **empty** grantee, so the entry begins
+with `=`:
+
+```sql
+-- The acl of every function in public, and the grants to PUBLIC.
+select p.proname,
+       p.proacl::text,
+       (select count(*) from unnest(p.proacl) as e where e::text like '=%') as public_entries
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+ order by p.proname
+```
+
+**The obvious check lies.** `proacl::text like '%=X/%'` answers **true** for all eight functions on a
+database where `PUBLIC` may execute nothing: `service_role=X/postgres` contains `=X/`. It reads as "PUBLIC
+grants execute: 8 of 8" — the opposite of the truth — and a check that is wrong on every row is worse than no
+check, because it looks like a result. The per-entry check needs the explicit `e::text`: `aclitem` does not
+cast to text implicitly.
+
+The eight functions answer two ACLs, and every one of them has an explicit, non-null `proacl` — the default
+for a function is EXECUTE to `PUBLIC`, so this is the exception and not the default:
+
+| Functions                                                                                         | `proacl`                                                                 | `PUBLIC` entries |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------- |
+| `create_project`, `reserve_knowledge_source`, `consume_message`, `save_chat_turn`, `match_chunks` | `{postgres=X/postgres,service_role=X/postgres}`                          | 0                |
+| `owned_project_ids`, `owned_conversation_ids`, `owner_activity`                                   | `{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}` | 0                |
+
+The second row is the deliberate exception (docs/project.md §9: SECURITY INVOKER everywhere, DEFINER only for
+the RLS helpers): `authenticated` may execute those three, because the policies call the helpers and a policy
+runs with the privileges of the querying role.
+
 ### 1.4 What it means
 
 PostgREST picks the HTTP status from the **SQLSTATE** of the error:
@@ -200,6 +234,10 @@ refusal it was written to map.
    the two plan limits → 409 `conflict`, the quota → 429 `quota_exceeded`, the conversation of another
    project → 404 `not_found`, everything else → 500 `internal_error`. The 400 the Data API answers is
    never passed on; the route builds its own answer from the hint. Treat the hint as a closed set.
+6. **Grant the refusal to `service_role` only.** The route calls it with the service key. `PUBLIC` and `anon`
+   must not be able to execute it, and the grant belongs in the migration that creates the function, with
+   `alter default privileges in schema public revoke execute on functions from public` keeping the default away
+   from everything after it. Check it with the per-entry query in §1.3, not with the one that lies.
 
 **The after-shape, measured.** The _after_ side — the same call, the same project, the same service key, the
 same body — answers **400** once the refusals raise `P0001`:
