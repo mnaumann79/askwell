@@ -151,7 +151,22 @@ select p.proname,
  order by p.proname
 ```
 
-Run it against askwell-dev — `execute_sql` of the Supabase MCP, or the SQL editor. It answers:
+Run it against askwell-dev. The SQL editor of the dashboard is the easy way; with the team's personal access
+token it is one POST away, and the body is `{"query": "<the sql>"}` with the block above in place of
+`<the sql>`:
+
+```bash
+curl -sS -X POST "https://api.supabase.com/v1/projects/wpvdyclozjjnghrcafpf/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary '{"query": "select 1"}'
+```
+
+Both blocks in this section run that way. The Supabase MCP's `execute_sql` is **not** the path: its tools need
+an authorisation the team does not have today, so an agent following it hits "requires authorization before
+its tools can be added".
+
+It answers:
 
 | `proname`                  | `raises` | `codes`   | `hints`                                         |
 | -------------------------- | -------- | --------- | ----------------------------------------------- |
