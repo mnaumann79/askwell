@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CANNED_REPLY, Panel } from "./panel";
-import { VISITOR_ID_KEY } from "./visitor-id";
+import { visitorIdKey } from "./visitor-id";
 
 /**
  * The panel in a browser (jsdom).
@@ -42,6 +42,17 @@ function configAnswer(status: number, body: unknown = CONFIG): void {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+  })) as unknown as typeof fetch;
+}
+
+/** The answer of a route that is not there: the HTML 404 of the framework. */
+function missingRoute(): void {
+  global.fetch = vi.fn(async () => ({
+    ok: false,
+    status: 404,
+    json: async () => {
+      throw new SyntaxError("Unexpected token '<'");
+    },
   })) as unknown as typeof fetch;
 }
 
@@ -174,11 +185,11 @@ describe("the panel in a browser", () => {
     expect(container.querySelector('[data-state="empty"]')).not.toBeNull();
   });
 
-  it("keeps the visitor id in its own storage", async () => {
+  it("keeps the visitor id in its own storage, under the project", async () => {
     stubParent();
     await mount();
 
-    expect(window.localStorage.getItem(VISITOR_ID_KEY)).toBeTruthy();
+    expect(window.localStorage.getItem(visitorIdKey(KEY))).toBeTruthy();
   });
 
   it("shows the visitor's message, then the typing state, then the reply", async () => {
@@ -258,13 +269,22 @@ describe("the panel in a browser", () => {
   });
 
   it("falls back to the default config while the config route is not there", async () => {
-    configAnswer(404);
+    missingRoute();
     stubParent();
 
     const { container } = await mount();
 
     expect(container.querySelector('[data-state="error"]')).toBeNull();
     expect(container.querySelector("input")).not.toBeNull();
+  });
+
+  it("shows the error state when the key is unknown", async () => {
+    configAnswer(404, { error: { code: "not_found", message: "No such project." } });
+    stubParent();
+
+    const { container } = await mount();
+
+    expect(container.querySelector('[data-state="error"]')).not.toBeNull();
   });
 
   it("shows the error state when the config route fails", async () => {

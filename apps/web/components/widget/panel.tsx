@@ -5,6 +5,7 @@ import {
   APP_NAME,
   DEFAULT_WIDGET_CONFIG,
   MAX_MESSAGE_CHARACTERS,
+  apiErrorSchema,
   widgetConfigResponseSchema,
 } from "@askwell/shared";
 import type { WidgetConfig } from "@askwell/shared";
@@ -94,10 +95,20 @@ export function Panel({ publicKey }: { publicKey: string }) {
           headers: { accept: "application/json" },
         });
 
-        // 404 means the route is not there yet, or the key is unknown. The
-        // loader shows nothing at all for an unknown key, so the panel falls
-        // back to the default config of a new project and stays usable.
+        // A 404 that is not our error shape means the route is not there yet
+        // (Lane A's route, P2P-T02, is not on main): the panel falls back to
+        // the default config of a new project and can be checked on its own.
+        // A 404 that *is* our error shape means the key is unknown, and that
+        // is the error state.
         if (response.status === 404) {
+          const body: unknown = await response.json().catch(() => null);
+          if (apiErrorSchema.safeParse(body).success) {
+            if (!cancelled) {
+              setStatus("error");
+            }
+            return;
+          }
+
           if (!cancelled) {
             setConfig(DEFAULT_WIDGET_CONFIG);
             setStatus("ready");
@@ -133,14 +144,18 @@ export function Panel({ publicKey }: { publicKey: string }) {
     };
   }, [publicKey]);
 
-  // The visitor ID: created once, reused on every visit.
+  // The visitor ID: created once, reused on every visit of this project.
   useEffect(() => {
+    if (!publicKey) {
+      return;
+    }
+
     try {
-      visitorRef.current = getVisitorId(window.localStorage);
+      visitorRef.current = getVisitorId(window.localStorage, publicKey);
     } catch {
       // Storage can be off. The chat still works, the id is just missing.
     }
-  }, []);
+  }, [publicKey]);
 
   // The protocol with the loader. Every message is checked against the origin
   // it must come from, and the panel never sends to `*`.
