@@ -4,3 +4,18 @@
 # and the diff would then hide the one thing the file carries - the schema
 # change (docs/project.md §3).
 packages/db/types.ts
+
+# The widget's build output.
+#
+# It is written by apps/widget/scripts/build.mjs and committed, so that a
+# deployment serves the loader without building it. Reformatting it would make
+# every build a diff, and the diff would then hide the one thing the file
+# carries - the loader itself (docs/project.md §3).
+apps/web/public/widget.js
+
+# The Supabase CLI's cache.
+#
+# The CLI writes it next to the project it is pointed at, and it is in
+# .gitignore - but prettier does not read .gitignore, so it has to be named
+# here as well.
+packages/db/supabase/.temp/

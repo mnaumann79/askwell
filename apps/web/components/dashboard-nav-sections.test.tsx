@@ -45,7 +45,15 @@ describe("the dashboard nav", () => {
     const html = renderToStaticMarkup(<NavSections pathname="/dashboard" />);
 
     expect(html).toContain('aria-disabled="true"');
-    expect(html).not.toContain("Projects</a>");
+    expect(html).not.toContain("Knowledge</a>");
+  });
+
+  it("links the sections that have a page of their own", () => {
+    const html = renderToStaticMarkup(<NavSections pathname="/dashboard" />);
+
+    expect(linkTag(html, "/dashboard/projects")).toContain('href="/dashboard/projects"');
+    expect(linkTag(html, "/dashboard/install")).toContain('href="/dashboard/install"');
+    expect(html).not.toContain('href="/dashboard/knowledge"');
   });
 
   it("finds the section the pathname is in", () => {

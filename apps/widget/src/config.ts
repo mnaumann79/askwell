@@ -29,7 +29,9 @@ const ANIMATIONS: readonly string[] = ["fade", "slide", "scale"];
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** The public key of the project, read from the loader's own script tag. */
-export function readPublicKey(script: { getAttribute(name: string): string | null } | null): string | null {
+export function readPublicKey(
+  script: { getAttribute(name: string): string | null } | null,
+): string | null {
   const key = script?.getAttribute("data-key")?.trim();
   return key ? key : null;
 }
