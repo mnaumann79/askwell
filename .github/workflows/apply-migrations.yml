@@ -1,4 +1,4 @@
-# Applies the migrations a push to `main` added.
+# Applies the migrations a push to `main` added, or one named by hand.
 #
 # The apply script is the only path to the database (docs/project.md §7). It takes a
 # migration's version, fetches the file from merged main, and writes the row the
@@ -9,6 +9,21 @@
 # The one credential this needs is SUPABASE_ACCESS_TOKEN, a repository secret the
 # product owner adds (Settings -> Secrets and variables -> Actions). Until it is
 # there, this job fails on purpose, with a message that says so.
+#
+# There are two ways in, and both go through the same script and the same guards:
+#
+#   - a push to `main` that touches supabase/migrations/** applies the files that
+#     push added, in file-name order. This is the path that runs by itself.
+#   - a workflow_dispatch applies the one version its input names, found in the
+#     checkout. There is no push and so no diff to read: the version comes from
+#     the input. This is the path for a version that has to be applied by hand.
+#
+# The guards do not move with the trigger. The script fetches the file from merged
+# main, so a hand-run applies the bytes that were merged and reviewed, and it
+# refuses a version that is not there, a file that is not the one the run verified,
+# and a row that is already there. A hand-run can therefore apply nothing that the
+# push path would not apply. The product owner still applies migrations to
+# production; this touches the dev project and only that.
 name: Apply migrations
 
 on:
@@ -17,6 +32,14 @@ on:
       - main
     paths:
       - "supabase/migrations/**"
+  # The apply can be run by hand for one version. The version is the migration
+  # file's own UTC timestamp, e.g. 20261110035018.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version to apply — the migration file's own UTC timestamp, e.g. 20261110035018."
+        required: true
+        type: string
 
 # One apply at a time. Two pushes that land close together must not race for the same
 # table, and the second one has to see the first one's row.
@@ -29,7 +52,7 @@ permissions:
 
 jobs:
   apply:
-    name: Apply the migrations this push added
+    name: Apply the migrations
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -37,7 +60,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           # The whole history: the files this push added are found by diffing the
-          # push's "before" commit against its "after" commit.
+          # push's "before" commit against its "after" commit, and the author of a
+          # migration is read from the commit that wrote it.
           fetch-depth: 0
 
       - name: Set up pnpm
@@ -53,6 +77,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply the migrations this push added
+        if: github.event_name == 'push'
         env:
           # The product owner's repository secret. The script needs it, and nothing
           # else does: no key, no URL, no project.
@@ -165,3 +190,78 @@ jobs:
             }
             echo "::endgroup::"
           done
+
+      - name: Apply the migration this run names
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          # The same repository secret the push path uses. The script needs it,
+          # and nothing else does: no key, no URL, no project.
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # This workflow's own token, so the script can read the repository
+          # through the API without spending the anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
+          # The version this run names. A dispatch is no push, so there is no
+          # diff to read and no "before" commit: the version comes from here.
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_ACCESS_TOKEN}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set. The product owner adds it as a repository secret (Settings -> Secrets and variables -> Actions -> New repository secret). Nothing is applied without it."
+            exit 1
+          fi
+
+          # A version is the migration file's own UTC timestamp: fourteen digits.
+          # Whitespace around it is a typo and is dropped; anything else that is
+          # not fourteen digits is refused here, before anything is fetched.
+          version="${VERSION//[[:space:]]/}"
+
+          if ! [[ "${version}" =~ ^[0-9]{14}$ ]]; then
+            echo "::error::\"${version}\" is not a version. A version is the migration file's own UTC timestamp, e.g. 20261110035018."
+            exit 1
+          fi
+
+          # The file for the version, in this checkout. The script finds the file
+          # on merged main and refuses a version that is not there; this finds the
+          # file here, so the bytes this run verified can be handed to the script
+          # as the expectation.
+          mapfile -t files < <(git ls-files -- "supabase/migrations/${version}_*.sql")
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No migration file with the version ${version} is in this checkout. The version is the file's own UTC timestamp, e.g. 20261110035018."
+            exit 1
+          fi
+
+          if [ "${#files[@]}" -gt 1 ]; then
+            echo "::error::More than one migration file in this checkout carries the version ${version}:"
+            printf '  %s\n' "${files[@]}"
+            echo "::error::A version identifies one migration. Refusing to guess which one."
+            exit 1
+          fi
+
+          file="${files[0]}"
+
+          # The script records the row's `created_by` from this checkout's git
+          # identity, and the rows already on dev carry the address of the commit
+          # that wrote the migration — the same address the push path records, so
+          # a hand-run leaves the same kind of row behind.
+          author="$(git log -1 --format='%ae' -- "${file}")"
+          git config user.email "${author}"
+
+          # The bytes this run verified, so the script refuses if the file on
+          # merged main is not the same file. The script fetches the file from
+          # merged main, so a dispatch from another branch still applies main's
+          # bytes — or is refused, when this checkout's bytes are not main's.
+          sha256="$(sha256sum "${file}" | cut -d' ' -f1)"
+
+          echo "This run applies ${version} (${file})."
+          echo "::group::Applying ${version}"
+          # The script is `packages/db`'s `db:apply`, run from its own package. Not
+          # `pnpm --filter`: a filter that matches no package exits 0 and applies
+          # nothing, and this job must not be able to succeed without applying.
+          (cd packages/db && pnpm db:apply "${version}" --expect-sha256 "${sha256}") || {
+            echo "::endgroup::"
+            echo "::error::db:apply refused ${version}. The job fails on purpose — a refusal must be loud. The reason is above."
+            exit 1
+          }
+          echo "::endgroup::"
