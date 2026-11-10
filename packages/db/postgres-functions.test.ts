@@ -25,6 +25,16 @@ const WIDGET_CONFIG = {
 
 const CONFIG = JSON.stringify(WIDGET_CONFIG);
 
+/**
+ * The SQLSTATE every refusal raises.
+ *
+ * `P0001` is the SQLSTATE of a deliberate raise. PostgREST maps it to 400 and
+ * hands the code, the message, the details and the hint through, while a
+ * custom code like `PT001` falls back to 5xx and comes back from the Data API
+ * as a 502 with an empty body and no code at all.
+ */
+const REFUSAL_SQLSTATE = "P0001";
+
 let db: PGlite;
 
 function vectorLiteral(position: number, value: number): string {
@@ -48,6 +58,42 @@ async function createProject(
     throw new Error("create_project returned nothing");
   }
   return project;
+}
+
+/**
+ * What a refusal carries: the SQLSTATE it raises, the machine-readable reason
+ * in the hint and the message a human reads.
+ */
+type Refusal = {
+  code: string | undefined;
+  hint: string | undefined;
+  message: string;
+};
+
+/**
+ * Asserts that a call is refused with the SQLSTATE the Data API can carry
+ * and with the reason of the refusal in the hint.
+ */
+async function expectRefusal(
+  promise: Promise<unknown>,
+  expected: { hint: string; message: RegExp },
+): Promise<void> {
+  let refusal: Refusal | null = null;
+
+  try {
+    await promise;
+  } catch (error) {
+    const failure = error as { code?: string; hint?: string; message: string };
+    refusal = { code: failure.code, hint: failure.hint, message: failure.message };
+  }
+
+  if (refusal === null) {
+    throw new Error("the call was not refused");
+  }
+
+  expect(refusal.code).toBe(REFUSAL_SQLSTATE);
+  expect(refusal.hint).toBe(expected.hint);
+  expect(refusal.message).toMatch(expected.message);
 }
 
 describe("the postgres functions", () => {
@@ -90,20 +136,27 @@ describe("the postgres functions", () => {
     });
 
     it("refuses when the plan allows no more projects", async () => {
-      await expect(createProject(OWNER, "Beta", 1)).rejects.toThrow(/project limit reached/);
+      await expectRefusal(createProject(OWNER, "Beta", 1), {
+        hint: "plan_limit_projects",
+        message: /project limit reached/,
+      });
     });
 
     it("refuses when the owner has no account", async () => {
-      await expect(createProject("owner-without-account", "Gamma", 5)).rejects.toThrow(
-        /no account for owner/,
-      );
+      await expectRefusal(createProject("owner-without-account", "Gamma", 5), {
+        hint: "no_account_or_project",
+        message: /no account for owner/,
+      });
     });
 
     it("does not let two calls take the last slot", async () => {
       const first = await createProject(OTHER, "First", 1);
       expect(first.id).toBeTruthy();
 
-      await expect(createProject(OTHER, "Second", 1)).rejects.toThrow(/project limit reached/);
+      await expectRefusal(createProject(OTHER, "Second", 1), {
+        hint: "plan_limit_projects",
+        message: /project limit reached/,
+      });
 
       const projects = await query<{ id: string }>(
         db,
@@ -122,7 +175,10 @@ describe("the postgres functions", () => {
 
       // The function runs in the caller's transaction, so it sees the row
       // above and the last slot is taken.
-      await expect(createProject("owner-c", "Another", 1)).rejects.toThrow(/project limit reached/);
+      await expectRefusal(createProject("owner-c", "Another", 1), {
+        hint: "plan_limit_projects",
+        message: /project limit reached/,
+      });
 
       await db.exec("rollback");
     });
@@ -172,7 +228,7 @@ describe("the postgres functions", () => {
     });
 
     it("refuses when the plan allows no more sources", async () => {
-      await expect(
+      await expectRefusal(
         query(db, "select id from public.reserve_knowledge_source($1, $2, $3, $4, $5)", [
           projectId,
           "One more",
@@ -180,7 +236,21 @@ describe("the postgres functions", () => {
           null,
           2,
         ]),
-      ).rejects.toThrow(/knowledge source limit reached/);
+        { hint: "plan_limit_knowledge", message: /knowledge source limit reached/ },
+      );
+    });
+
+    it("refuses a project that does not exist", async () => {
+      await expectRefusal(
+        query(db, "select id from public.reserve_knowledge_source($1, $2, $3, $4, $5)", [
+          "11111111-1111-4111-8111-111111111111",
+          "Orphan",
+          "text",
+          null,
+          3,
+        ]),
+        { hint: "no_account_or_project", message: /no project/ },
+      );
     });
 
     it("does not let two calls take the last slot", async () => {
@@ -193,14 +263,15 @@ describe("the postgres functions", () => {
         null,
       ]);
 
-      await expect(
+      await expectRefusal(
         query(db, "select id from public.reserve_knowledge_source($1, $2, $3, $4, 1)", [
           other.id,
           "Second",
           "text",
           null,
         ]),
-      ).rejects.toThrow(/knowledge source limit reached/);
+        { hint: "plan_limit_knowledge", message: /knowledge source limit reached/ },
+      );
     });
 
     it("may only be run by the server", async () => {
@@ -245,9 +316,10 @@ describe("the postgres functions", () => {
     });
 
     it("refuses at the quota and counts nothing", async () => {
-      await expect(query(db, "select public.consume_message($1, 1)", [projectId])).rejects.toThrow(
-        /message quota reached/,
-      );
+      await expectRefusal(query(db, "select public.consume_message($1, 1)", [projectId]), {
+        hint: "quota_exceeded",
+        message: /message quota reached/,
+      });
 
       const project = await query<{ messages_used: number }>(
         db,
@@ -255,6 +327,13 @@ describe("the postgres functions", () => {
         [projectId],
       );
       expect(project[0]?.messages_used).toBe(1);
+    });
+
+    it("refuses a project that does not exist", async () => {
+      await expectRefusal(
+        query(db, "select public.consume_message($1, 1)", ["11111111-1111-4111-8111-111111111111"]),
+        { hint: "no_account_or_project", message: /no project/ },
+      );
     });
 
     it("does not let two calls pass the quota", async () => {
@@ -267,9 +346,10 @@ describe("the postgres functions", () => {
       );
       expect(first[0]?.consume_message).toBe(1);
 
-      await expect(query(db, "select public.consume_message($1, 1)", [other.id])).rejects.toThrow(
-        /message quota reached/,
-      );
+      await expectRefusal(query(db, "select public.consume_message($1, 1)", [other.id]), {
+        hint: "quota_exceeded",
+        message: /message quota reached/,
+      });
 
       const project = await query<{ messages_used: number }>(
         db,
@@ -370,7 +450,7 @@ describe("the postgres functions", () => {
         "select id from public.conversations limit 1",
       );
 
-      await expect(
+      await expectRefusal(
         query(db, "select public.save_chat_turn($1, $2, $3, $4, $5)", [
           conversation[0]?.id ?? "",
           other.id,
@@ -378,7 +458,8 @@ describe("the postgres functions", () => {
           "hello",
           "hi",
         ]),
-      ).rejects.toThrow(/does not belong to project/);
+        { hint: "no_conversation", message: /does not belong to project/ },
+      );
     });
 
     it("may only be run by the server", async () => {
