@@ -1,0 +1,6 @@
+{
+  "dev": {
+    "ref": "wpvdyclozjjnghrcafpf",
+    "allow": ["migrations:agent", "types:agent"]
+  }
+}
