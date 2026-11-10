@@ -51,10 +51,7 @@ function toAccount(row: unknown): Account {
  * the signed-in owner and no other account is reachable (docs/project.md §7,
  * §9).
  */
-async function readAccount(
-  client: SupabaseClient,
-  clerkUserId: string,
-): Promise<Account | null> {
+async function readAccount(client: SupabaseClient, clerkUserId: string): Promise<Account | null> {
   const { data, error } = await client
     .from("accounts")
     .select(ACCOUNT_COLUMNS)
