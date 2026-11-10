@@ -16,6 +16,10 @@ coverage/
 *.tsbuildinfo
 .eslintcache
 .vercel/
+# The Supabase CLI writes its cache next to the project. `pnpm db:types` runs
+# the CLI from packages/db, so it leaves a second copy there. The leading `**`
+# is what makes it match at any depth.
+**/supabase/.temp/
 
 # OS / editor
 .DS_Store
