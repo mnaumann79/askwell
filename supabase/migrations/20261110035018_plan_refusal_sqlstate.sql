@@ -39,9 +39,10 @@
 --
 -- The route maps the hint to the error code of the shared contract
 -- (packages/shared/src/api/errors.ts): the two plan limits answer 409
--- (conflict), the quota answers 429 (quota_exceeded) and the missing account
--- or project answers 500 (internal_error). The 400 the Data API answers is
--- never passed on: the route builds its own answer from the hint.
+-- (conflict), the quota answers 429 (quota_exceeded), the missing account
+-- or project answers 500 (internal_error) and the conversation of another
+-- project answers 404 (not_found). The 400 the Data API answers is never
+-- passed on: the route builds its own answer from the hint.
 --
 -- Nothing else changes. The signatures and the return types stay the same, so
 -- this is a plain `create or replace`: no drop, no rename, and the grants stay
@@ -217,5 +218,51 @@ begin
   returning messages_used into v_messages;
 
   return v_messages;
+end;
+$$;
+
+-- Writes the visitor message and the bot reply. The first message of a
+-- visitor creates the conversation.
+create or replace function public.save_chat_turn(
+  p_conversation_id uuid,
+  p_project_id uuid,
+  p_visitor_id text,
+  p_visitor_message text,
+  p_bot_reply text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_conversation_id uuid;
+begin
+  if p_conversation_id is null then
+    insert into public.conversations (project_id, visitor_id)
+    values (p_project_id, p_visitor_id)
+    returning id into v_conversation_id;
+  else
+    -- The conversation id comes from the visitor, and this function runs as
+    -- service_role, so RLS cannot catch a conversation of another project.
+    select id
+    into v_conversation_id
+    from public.conversations
+    where id = p_conversation_id
+      and project_id = p_project_id;
+
+    if not found then
+      raise exception 'conversation % does not belong to project %', p_conversation_id, p_project_id
+        using errcode = 'P0001', hint = 'no_conversation';
+    end if;
+  end if;
+
+  insert into public.messages (conversation_id, role, body)
+  values (v_conversation_id, 'visitor', p_visitor_message);
+
+  insert into public.messages (conversation_id, role, body)
+  values (v_conversation_id, 'bot', p_bot_reply);
+
+  return v_conversation_id;
 end;
 $$;

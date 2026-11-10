@@ -450,7 +450,7 @@ describe("the postgres functions", () => {
         "select id from public.conversations limit 1",
       );
 
-      await expect(
+      await expectRefusal(
         query(db, "select public.save_chat_turn($1, $2, $3, $4, $5)", [
           conversation[0]?.id ?? "",
           other.id,
@@ -458,7 +458,8 @@ describe("the postgres functions", () => {
           "hello",
           "hi",
         ]),
-      ).rejects.toThrow(/does not belong to project/);
+        { hint: "no_conversation", message: /does not belong to project/ },
+      );
     });
 
     it("may only be run by the server", async () => {
