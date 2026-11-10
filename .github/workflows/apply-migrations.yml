@@ -60,7 +60,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           # The whole history: the files this push added are found by diffing the
-          # push's "before" commit against its "after" commit.
+          # push's "before" commit against its "after" commit, and the author of a
+          # migration is read from the commit that wrote it.
           fetch-depth: 0
 
       - name: Set up pnpm
