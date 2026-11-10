@@ -2,8 +2,9 @@
 
 How to recognise, measure and answer the failures we hit on the Supabase Data API.
 
-Every number here was measured on **askwell-dev** (`wpvdyclozjjnghrcafpf`) on **2026-11-10**, from three
-sandboxes, byte for byte identical.
+Every number here was measured on **askwell-dev** (`wpvdyclozjjnghrcafpf`) on **2026-11-10**, from four
+sandboxes, byte for byte identical: mine (the original run behind PR #12, repeated today), Dwight's and
+Michael's.
 
 ---
 
@@ -172,11 +173,11 @@ claim it as a measurement.
 
 ## 2. Where these facts live
 
-| Fact                                                          | Where                                                          |
-| ------------------------------------------------------------- | -------------------------------------------------------------- |
-| The refusals now raise `P0001` with the reason in the `hint`  | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql` |
-| The measured facts, carried in the newest migration's comment | the P1F-T12 migration                                          |
-| The 502 body is 110 bytes, not empty                          | this runbook (§1.1) — see below                                |
+| Fact                                                         | Where                                                                                    |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| The refusals now raise `P0001` with the reason in the `hint` | `supabase/migrations/20261110035018_plan_refusal_sqlstate.sql`                           |
+| The measured facts, carried in a migration's comment         | the file P1F-T12 produces, `20261110130500_plan_refusal_comment_correction.sql` (PR #14) |
+| The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                          |
 
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
 A merged migration is never edited, so it stays wrong on purpose and this runbook is the correction.
