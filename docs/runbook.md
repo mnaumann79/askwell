@@ -124,6 +124,26 @@ For the raised SQLSTATE the first command answers `502 110`, and `sha256sum body
 reader who runs the recipe today gets the 400 — which is the fix working, not the recipe being wrong. The
 recipe is here for the day someone raises a `PT` code again.
 
+**The numbers that call answers today**, measured on askwell-dev:
+
+| Fact        | Value                                                              |
+| ----------- | ------------------------------------------------------------------ |
+| status      | `400`                                                              |
+| body        | **115 bytes**, no trailing newline                                 |
+| body sha256 | `ebf2f8ab17ffed452311acddbd8534299b9f13fea029e57d2d212b64ea8ba3ac` |
+| `code`      | `P0001`                                                            |
+| `hint`      | `no_account_or_project`                                            |
+
+```
+{"code":"P0001","details":null,"hint":"no_account_or_project","message":"no account for owner nope-does-not-exist"}
+```
+
+**115 bytes, not the 103 of §1.5** — they are two different refusals. The recipe's body names an owner that
+does not exist, so it refuses with `no_account_or_project`; the call in §1.5 names a real owner and asks for
+`p_max_projects: 0`, so it refuses with the plan limit and answers 103 bytes. That is the better recipe — it
+does not depend on an account being there — and it is why the two sha256s differ. A reader can check the fix
+against a byte count, not only against a status.
+
 `headers.txt` holds both status lines — the `HTTP/1.0 200 Connection established` of the proxy and the
 app's answer below it.
 
@@ -311,6 +331,7 @@ and the same numbers are in PR #18's body — GitHub does not truncate a body, s
 | The measured facts, carried in a migration's comment         | the file P1F-T12 produces, `20261110130500_plan_refusal_comment_correction.sql` (PR #14)                          |
 | The 502 body is 110 bytes, not empty                         | this runbook (§1.1) — see below                                                                                   |
 | The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242) |
+| The recipe's own answer today: 400, 115 bytes                | this runbook (§1.3) — a different refusal, so a different body                                                    |
 | What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                          |
 | The advisor findings, and the complete execute table         | [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                                                    |
 | The two ACLs, and the grants to `PUBLIC`                     | this runbook (§1.3) and PR #18's body                                                                             |
