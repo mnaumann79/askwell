@@ -6,6 +6,9 @@ Every number here was measured on **askwell-dev** (`wpvdyclozjjnghrcafpf`) on **
 over in four sandboxes — Jim's (the run behind PR #12), Dwight's, and the lead's twice (behind PR #12's
 comment and again today) — byte for byte identical.
 
+§3 is the exception: it is about a request to GitHub and not about the Data API, and it was measured
+against GitHub on the same day.
+
 ---
 
 ## 1. The Data API 502 on a raised SQLSTATE
@@ -450,3 +453,88 @@ the SQL ran and not only the row.**
 edited, so its sentence stays as it is — exactly like
 `20261110035018_plan_refusal_sqlstate.sql` says "empty body" in three places.
 **This runbook is the correction.**
+
+---
+
+## 3. The sandbox makes a private repository look public
+
+`mnaumann79/askwell` is a **private** repository. A request for one of its files on
+`raw.githubusercontent.com` that carries no `Authorization` header is answered with **404** — the same
+answer as a file that does not exist. GitHub does not tell an anonymous caller that a private file is
+there.
+
+The sandbox's proxy injects GitHub credentials into every outbound request, so the same request answers
+**200** here. **So code that fetches from GitHub without a token passes in the sandbox and fails on a
+runner.** "It worked in my sandbox" is not evidence for a workflow: the only honest test of a runner is
+the runner.
+
+### 3.1 What it looks like
+
+The apply script reads the migration file from merged main over HTTPS. Its listing call sent the token;
+its file call did not. The run on the Actions runner failed like this:
+
+```
+db:apply: cannot fetch supabase/migrations/20261110035018_plan_refusal_sqlstate.sql from main (HTTP 404).
+```
+
+That is the run: <https://github.com/mnaumann79/askwell/actions/runs/42908725476> — a dispatch of the
+apply workflow with the version `20261110035018`, a version that is already on dev, so the run was to
+prove the runner and write nothing. It stopped one step before the refusal it was meant to reach.
+
+The repository is private:
+
+```bash
+gh repo view mnaumann79/askwell --json visibility,isPrivate
+# {"isPrivate":true,"nameWithOwner":"mnaumann79/askwell","visibility":"PRIVATE"}
+```
+
+### 3.2 How to measure it
+
+The same request, twice — once as the sandbox sees it, once as a runner does:
+
+```bash
+# The sandbox: the proxy adds the credentials, so the answer is 200 and the file arrives.
+curl -sS -o /dev/null -w "%{http_code} bytes=%{size_download}\n" \
+  "https://raw.githubusercontent.com/mnaumann79/askwell/main/supabase/migrations/20261110035018_plan_refusal_sqlstate.sql"
+
+# The runner: straight to GitHub, without credentials, and the answer is 404.
+curl --noproxy '*' -sS -o /dev/null -w "%{http_code} bytes=%{size_download}\n" \
+  "https://raw.githubusercontent.com/mnaumann79/askwell/main/supabase/migrations/20261110035018_plan_refusal_sqlstate.sql"
+```
+
+| Request                                | Status | Bytes |
+| -------------------------------------- | ------ | ----- |
+| through the sandbox's proxy             | 200    | 8831  |
+| straight to GitHub, without credentials | 404    | 14    |
+
+A node process needs the proxy variables **unset**, not `NO_PROXY`: undici's environment proxy agent does
+not read `NO_PROXY`, so the request still goes through the proxy and still answers 200.
+
+```bash
+# NO_PROXY alone changes nothing — the request still goes through the proxy, and the
+# script gets as far as the row it would have refused:
+NO_PROXY=raw.githubusercontent.com node packages/db/scripts/apply-migration.mjs 20261110035018
+# db:apply: row-exists: The row for version 20261110035018 is already on the project. …
+
+# Unsetting the proxy variables is what takes the request straight to GitHub.
+env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy node packages/db/scripts/apply-migration.mjs 20261110035018
+# db:apply: cannot list supabase/migrations/ on main (HTTP 404).
+```
+
+The second one fails one step earlier in the sandbox than on the runner, and that is the same cause one
+step earlier: the credentials live in the proxy. Without a token the listing is anonymous and a private
+repository answers **404**; with the sandbox's own `GH_TOKEN` — a placeholder the proxy translates, and
+one GitHub does not accept on its own — it answers **401**.
+
+### 3.3 What to do
+
+1. **Send the token on every GitHub request.** The listing already did; the file fetch did not. One header
+   on the fetch, or the contents API instead of the raw one, is the whole fix.
+2. **Read a 404 from a raw fetch as "no credentials", not "no file".** A private repository answers 404 for
+   a file that is there.
+3. **Test a workflow on the runner.** Everything else — the script, the guards, the refusal — was proven
+   locally and was right about everything it covered. The runner was the one thing a local test could not
+   cover, and it was where the defect was.
+4. **After a run, read the table and compare.** The five rows on `supabase_migrations.schema_migrations`
+   were identical before and after the run: the same versions, the same byte counts, the same md5s, the
+   same `created_by`. A refusal that stops before the batch writes nothing, and the table is the proof.
