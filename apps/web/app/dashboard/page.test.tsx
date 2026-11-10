@@ -35,7 +35,7 @@ describe("the dashboard Overview", () => {
     const html = await renderOverview();
 
     expect(html).toContain('href="/dashboard/projects"');
-    expect(html).toContain("Your projects");
+    expect(html).toContain("Create a project");
   });
 
   it("still shows the plan badge and the empty state", async () => {

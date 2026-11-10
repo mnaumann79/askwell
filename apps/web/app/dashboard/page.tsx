@@ -32,13 +32,13 @@ export default async function DashboardPage() {
       <GlassPanel>
         <EmptyState
           title="Nothing here yet"
-          description="Your projects, the knowledge you add to them and the conversations they collect all show up here."
+          description="Your projects show up here. Create one and it gets its own widget."
           action={
             <Link
               href={`${DASHBOARD_URL}/projects`}
               className="rounded-card border border-border bg-surface-strong px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-border"
             >
-              Your projects
+              Create a project
             </Link>
           }
         />
