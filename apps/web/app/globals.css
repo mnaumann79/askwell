@@ -46,3 +46,71 @@ html,
 body {
   min-height: 100%;
 }
+
+/*
+ * The light half of the same tokens (docs/project.md §13).
+ *
+ * The landing page is dark and the dashboard is light, but both read the same
+ * token names, so no utility changes. Adding `.theme-light` to a wrapper
+ * redeclares the tokens for that subtree; the utilities underneath pick the
+ * new values up, because they resolve through the same custom properties.
+ */
+.theme-light {
+  color-scheme: light;
+
+  --color-background: #fafafa;
+  --color-foreground: #09090b;
+  --color-muted: #52525b;
+  --color-surface: rgb(255 255 255 / 0.72);
+  --color-surface-strong: rgb(255 255 255 / 0.92);
+  --color-border: rgb(9 9 11 / 0.12);
+  --color-accent: #09090b;
+
+  --shadow-glass: 0 24px 60px -24px rgb(9 9 11 / 0.18);
+}
+
+/*
+ * Scroll reveal (docs/project.md §13: "simple motion: subtle entrance and
+ * scroll animations").
+ *
+ * A scroll-driven animation, so the page needs no JavaScript for it. The
+ * entrance animation above is the one the hero uses; this one fades a
+ * section in as it scrolls into view.
+ */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Browsers without scroll-driven animations skip this block and show the
+ * content as it is, and so do visitors who ask for less motion.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .scroll-reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 30%;
+    }
+  }
+}
+
+/*
+ * Visitors who ask for less motion get the content without the animation.
+ *
+ * These rules are not in a layer, so they win over the utilities Tailwind
+ * generates for the same classes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter,
+  .animate-pulse {
+    animation: none;
+  }
+}

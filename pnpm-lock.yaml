@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@clerk/nextjs':
+      specifier: 7.9.25
+      version: 7.9.25
     '@electric-sql/pglite':
       specifier: 0.5.16
       version: 0.5.16
@@ -90,7 +93,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       '@clerk/nextjs':
-        specifier: 7.9.25
+        specifier: 'catalog:'
         version: 7.9.25(next@16.4.6(@types/node@22.18.13)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@supabase/supabase-js':
         specifier: 2.119.0
@@ -159,7 +162,13 @@ importers:
       '@electric-sql/pglite':
         specifier: 'catalog:'
         version: 0.5.16
+      '@electric-sql/pglite-pgvector':
+        specifier: 0.0.17
+        version: 0.0.17(@electric-sql/pglite@0.5.16)
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.18.13
       eslint:
         specifier: 'catalog:'
         version: 10.14.0(jiti@2.7.0)
@@ -234,6 +243,11 @@ packages:
         optional: true
       react-dom:
         optional: true
+
+  '@electric-sql/pglite-pgvector@0.0.17':
+    resolution: {integrity: sha512-tOFBigmwl+6qqZ5y2wOUeDngKeO22lLslSQjmaZri5WAh7V3bDUQaxxlT9MJLSPmdwPjR0NRHqk2V5yFtgLUYQ==}
+    peerDependencies:
+      '@electric-sql/pglite': 0.5.16
 
   '@electric-sql/pglite@0.5.16':
     resolution: {integrity: sha512-Nj8KcIsJL748W408U2N8q4+9IlONdpRIU8MJypIAAINMJ5nqKyqpX7Mgg/5XKkXiAib3AoZGR6hnJFlrlLBrcg==}
@@ -1721,6 +1735,10 @@ snapshots:
     optionalDependencies:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
+
+  '@electric-sql/pglite-pgvector@0.0.17(@electric-sql/pglite@0.5.16)':
+    dependencies:
+      '@electric-sql/pglite': 0.5.16
 
   '@electric-sql/pglite@0.5.16': {}
 

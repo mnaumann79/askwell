@@ -1,0 +1,6 @@
+# The Supabase type generator's output.
+#
+# It must not be reformatted: a reformat would make every regeneration a diff,
+# and the diff would then hide the one thing the file carries - the schema
+# change (docs/project.md §3).
+packages/db/types.ts
