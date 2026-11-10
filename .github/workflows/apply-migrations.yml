@@ -142,12 +142,10 @@ jobs:
             # identity, and the rows already on dev carry the address of the commit
             # that wrote the migration. A checkout has no identity of its own, so it
             # is set here — otherwise the first workflow-applied row would be the
-            # first one without an address.
+            # first one without an address. It is set for every file, empty and all,
+            # so one migration's author can never be recorded against the next.
             author="$(git log -1 --format='%ae' -- "${file}")"
-
-            if [ -n "${author}" ]; then
-              git config user.email "${author}"
-            fi
+            git config user.email "${author}"
 
             # The bytes this push reviewed, so the script refuses if the file on
             # merged main is not the same file.
