@@ -99,7 +99,8 @@ async function send(container: HTMLElement): Promise<void> {
 }
 
 beforeEach(() => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  // React only lets `act` run when it knows it is in a test.
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   configAnswer(200);
   window.localStorage.clear();
 });
