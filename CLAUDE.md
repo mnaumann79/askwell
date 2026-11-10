@@ -54,8 +54,9 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 - Migrations are SQL files in `supabase/migrations`, named `<UTC timestamp>_<name>.sql`, newer than the latest one on `main`. Never edit a merged migration.
 - Every new table or function ships with its RLS policies and grants in the same migration (see `project.md` §7 and §9). Add a new table or column only if your task says so.
 - Test migrations, policies and functions on pglite (`packages/db/supabase-pglite.ts`). Never run a local Supabase stack or a Docker database.
-- The Supabase dev project is shared by every developer and every preview. Its data is throwaway, but never apply an unmerged migration to it. After your PR merges, apply it to dev through the Supabase MCP, recording the file's version, then regenerate the types (the MCP's type generator) and confirm there's no diff.
-- The Supabase MCP is scoped to the dev project. Never touch the production database. The product owner applies migrations to production before promoting the build.
+- The Supabase dev project is shared by every developer and every preview. Its data is throwaway, but never apply an unmerged migration to it. After your PR merges, apply it to dev with `pnpm db:apply <version>`, where the version is the migration file's own UTC timestamp, then regenerate the types with `pnpm db:types` and confirm there's no diff. The script fetches the file from merged main, applies it and records the row the platform records — the version, the name and the file's bytes in `statements` — in one batch. Read that row back and confirm `md5(statements[1])` matches the file's `md5sum`; a row with only a version and a name carries nothing to check against, so the applied content would be unverifiable. The script refuses if that row is already there. `--expect-sha256` refuses a file that is not the one you verified. It needs `SUPABASE_ACCESS_TOKEN` and nothing else.
+- The Supabase MCP is not the path: its tools need an authorisation the team does not have, and its token names a project that is not ours.
+- The projects we may write to are named in `packages/db/supabase-projects.json`, and `packages/db/supabase-projects.md` beside it says what the entries mean. A project that is not in that file is not a target: the scripts resolve their target from it, and `SUPABASE_PROJECT_ID` can only narrow the choice among the projects that already permit the operation. Never touch the production database. Only the dev project is ours to write to, and the product owner applies migrations to production before promoting the build.
 - Migrations are additive: the live version must keep working while one runs. Dropping or renaming a table or column happens in a later PR, once no deployed code uses it.
 
 ## Security rules
@@ -85,4 +86,5 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 |---|---|
 | `pnpm dev` | Run the app locally |
 | `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` | Checks. All must pass before a PR. |
-| `pnpm db:types` | Regenerate `packages/db/types.ts` from the dev project (needs `SUPABASE_ACCESS_TOKEN`; agents use the MCP's type generator instead) |
+| `pnpm db:apply <version>` | Apply a migration to dev (needs `SUPABASE_ACCESS_TOKEN`) |
+| `pnpm db:types` | Regenerate `packages/db/types.ts` from the dev project (needs `SUPABASE_ACCESS_TOKEN`) |

@@ -37,6 +37,28 @@ export async function query<T extends Record<string, unknown>>(
   return result.rows;
 }
 
+/**
+ * Runs a batch of statements and returns the rows of the last one.
+ *
+ * The Management API runs a multi-statement string as one batch and hands back the
+ * last statement's result. `exec` uses the same simple-query protocol, so a test can
+ * assert on the result of the statement that matters — the insert that records a
+ * migration, not a statement read afterwards.
+ */
+export async function queryBatch<T extends Record<string, unknown>>(
+  db: PGlite,
+  sql: string,
+): Promise<T[]> {
+  const results = await db.exec(sql);
+  const last = results[results.length - 1];
+
+  if (!last) {
+    throw new Error("the batch returned no result");
+  }
+
+  return last.rows as T[];
+}
+
 /** Closes the database and releases its resources. */
 export async function closeTestDb(db: PGlite): Promise<void> {
   await db.close();
