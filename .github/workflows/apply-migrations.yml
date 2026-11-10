@@ -86,16 +86,18 @@ jobs:
           # A merged migration is never edited, so a migration this push *changed*
           # rather than added is a mistake worth stopping for: the database already
           # holds the old bytes under that version, and applying the new ones would
-          # leave the database and main disagreeing. A rename is an edit too.
-          if ! changed_files="$(git diff --name-only --diff-filter=MR "${before}" "${after}" -- 'supabase/migrations/**')"; then
+          # leave the database and main disagreeing. A rename is an edit too, and a
+          # file moved *out* of the directory reads as a deletion here: git pairs the
+          # two sides of a rename only when both of them are in the diff.
+          if ! changed_files="$(git diff --name-only --diff-filter=MRD "${before}" "${after}" -- 'supabase/migrations/**')"; then
             echo "::error::Could not diff ${before} against ${after}."
             exit 1
           fi
 
           if [ -n "${changed_files}" ]; then
-            echo "::error::This push edits a migration that is already merged:"
+            echo "::error::This push changes a migration that is already merged:"
             printf '  %s\n' "${changed_files}"
-            echo "::error::A merged migration is never edited. Add a new migration file instead."
+            echo "::error::A merged migration is never edited, renamed or removed. Add a new migration file instead."
             exit 1
           fi
 
