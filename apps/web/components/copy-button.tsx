@@ -1,16 +1,42 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { StateMessage } from "../state-message";
+import { StateMessage } from "./state-message";
 
 /**
- * The copy button on the install snippet (docs/project.md §6.9).
+ * The copy button (docs/project.md §6.9).
+ *
+ * One button, two callers: the landing page and the install page.
  *
  * It has the states a screen should have (§13): idle, working, done and
  * failed. When the clipboard is not available it says so and leaves the
  * snippet selectable.
  */
 type CopyState = "idle" | "copying" | "copied" | "error";
+
+/**
+ * The writer that puts the text on the clipboard.
+ *
+ * The writer is a parameter, so the copy path can be tested without a DOM:
+ * the browser has no clipboard in node, and the button's own click is the one
+ * line a DOM is needed for.
+ */
+export type ClipboardWriter = (text: string) => Promise<void>;
+
+/**
+ * Puts the text on the clipboard.
+ *
+ * A rejected write comes back as a rejection, and the button turns that into
+ * its failed state.
+ */
+export async function copyText(text: string, write: ClipboardWriter): Promise<void> {
+  await write(text);
+}
+
+/** The browser's own clipboard. */
+function browserClipboard(): ClipboardWriter {
+  return (text) => navigator.clipboard.writeText(text);
+}
 
 export function CopyButton({ text }: { text: string }) {
   const [state, setState] = useState<CopyState>("idle");
@@ -23,7 +49,7 @@ export function CopyButton({ text }: { text: string }) {
     setState("copying");
 
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text, browserClipboard());
       setState("copied");
     } catch {
       setState("error");
