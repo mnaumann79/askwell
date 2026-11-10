@@ -144,6 +144,9 @@ jobs:
             # is set here — otherwise the first workflow-applied row would be the
             # first one without an address. It is set for every file, empty and all,
             # so one migration's author can never be recorded against the next.
+            # The address ends up in supabase_migrations.schema_migrations, so it is
+            # the author's address and not the runner's — the same thing the
+            # platform's own apply records.
             author="$(git log -1 --format='%ae' -- "${file}")"
             git config user.email "${author}"
 
