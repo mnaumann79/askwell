@@ -5,9 +5,11 @@
 # and runs the commands the project already uses. If a step ever seems to need
 # one, that is a finding to report, not a value to add here.
 #
-# The versions come from the repository too — `packageManager` and
-# `engines.node` in package.json — so the workflow and the project cannot drift
-# apart.
+# The versions come from the repository too — `packageManager` in
+# package.json and the Node version in `.nvmrc` — so the workflow and the
+# project cannot drift apart. `engines.node` is a range, so it would float with
+# the newest release that satisfies it; `.nvmrc` pins the version the project
+# uses.
 #
 # It applies no migration and touches no database: `supabase/migrations/**` is
 # applied by the other workflow, on `main`, and only there.
@@ -19,6 +21,12 @@ on:
 # The workflow must not be able to write.
 permissions:
   contents: read
+
+# A superseded run is cancelled rather than left to finish: minutes count
+# against a quota on a private repository.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -35,7 +43,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: package.json
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install
