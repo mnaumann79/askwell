@@ -156,6 +156,28 @@ describe("GET /api/widget/config", () => {
     });
   });
 
+  it("answers 500 when the stored config breaks the contract", async () => {
+    // The contract is tightened to a hex button color, so a stored row that
+    // carries anything else cannot be answered: the widget would render
+    // nothing with it. It is an error, not a config.
+    const { client } = fakeClient((call) => {
+      if (call.table === "projects") {
+        return { data: PROJECT_ROW, error: null };
+      }
+      if (call.table === "accounts") {
+        return { data: { plan: "pro" }, error: null };
+      }
+      return { data: { ...CONFIG_ROW, button_color: "red" }, error: null };
+    });
+    createClientMock.mockImplementation(() => client);
+
+    const response = await GET(configRequest(PUBLIC_KEY));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error.code).toBe("internal_error");
+  });
+
   it("reads the plan from the owner's account row on the server", async () => {
     const { client, calls } = fakeClient((call) => {
       if (call.table === "projects") {
