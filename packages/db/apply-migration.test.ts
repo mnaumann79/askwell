@@ -403,7 +403,10 @@ describe("the repository fetches", () => {
       vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
         calls.push({ url: String(url), headers: init?.headers ?? {} });
 
-        return new Response(body, { status: 200 });
+        return new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/vnd.github.raw; charset=utf-8" },
+        });
       }),
     );
 
@@ -453,6 +456,25 @@ describe("the repository fetches", () => {
     await listFilesOnMain();
 
     expect(calls[0]?.headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("refuses an answer that came back as metadata, not as the file", async () => {
+    process.env.GITHUB_TOKEN = "test-token";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"sha":"5e2a547a","size":8831}', {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          }),
+      ),
+    );
+
+    await expect(
+      fetchFileOnMain("supabase/migrations/20261110035018_plan_refusal_sqlstate.sql"),
+    ).rejects.toThrow(/came back as metadata, not as the file/);
   });
 
   it("fetches without a token when there is none", async () => {

@@ -376,6 +376,17 @@ export async function fetchFileOnMain(filePath) {
     throw new Error(`db:apply: cannot fetch ${filePath} from main (HTTP ${response.status}).`);
   }
 
+  // The API serves the raw media type for a file it can, and the metadata
+  // instead for one over 1 MB. Metadata is not SQL, so say that plainly rather
+  // than letting it read as a file whose bytes differ.
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/vnd.github.raw")) {
+    throw new Error(
+      `db:apply: the file on main came back as metadata, not as the file (content-type: ${contentType}).`,
+    );
+  }
+
   return Buffer.from(await response.arrayBuffer());
 }
 
