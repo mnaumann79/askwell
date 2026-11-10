@@ -77,10 +77,10 @@ export function Panel({ publicKey }: { publicKey: string }) {
   // once the chat route exists (docs/project.md §6.5).
   const visitorRef = useRef<string | null>(null);
 
-  // The config of the project. Lane A's route (P2P-T02) is not on main yet, so
-  // the app answers 404 for it until that route lands: the panel falls back to
-  // the default config then, so it can be checked on its own. The end-to-end
-  // check waits for the route.
+  // The config of the project. The route answers 404 for a key that belongs to
+  // no project, and the panel tells that apart from a deployment that does not
+  // have the route at all: it falls back to the default config then, so the
+  // panel can be checked on its own.
   useEffect(() => {
     if (!publicKey) {
       setStatus("error");
@@ -95,11 +95,10 @@ export function Panel({ publicKey }: { publicKey: string }) {
           headers: { accept: "application/json" },
         });
 
-        // A 404 that is not our error shape means the route is not there yet
-        // (Lane A's route, P2P-T02, is not on main): the panel falls back to
-        // the default config of a new project and can be checked on its own.
-        // A 404 that *is* our error shape means the key is unknown, and that
-        // is the error state.
+        // A 404 that is not our error shape means the deployment does not have
+        // the route: the panel falls back to the default config of a new
+        // project and can be checked on its own. A 404 that *is* our error
+        // shape means the key is unknown, and that is the error state.
         if (response.status === 404) {
           const body: unknown = await response.json().catch(() => null);
           if (apiErrorSchema.safeParse(body).success) {
