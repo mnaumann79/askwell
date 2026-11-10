@@ -119,6 +119,11 @@ curl -sS -o control.bin -w '%{http_code} %{size_download}\n' \
 For the raised SQLSTATE the first command answers `502 110`, and `sha256sum body.bin` prints
 `f8ad80965ef3d2fb9ad4a3ea49272c02172d9f299cdedb418bb811988e007545`. The control answers `200 2`.
 
+**This reproduces the failure on a database that still raises a `PT` code.** Ours does not: since
+`20261110035018` every refusal raises `P0001` and the same call answers **400** with the hint (§1.5). So a
+reader who runs the recipe today gets the 400 — which is the fix working, not the recipe being wrong. The
+recipe is here for the day someone raises a `PT` code again.
+
 `headers.txt` holds both status lines — the `HTTP/1.0 200 Connection established` of the proxy and the
 app's answer below it.
 
