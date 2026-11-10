@@ -23,7 +23,7 @@ export function Install() {
       />
 
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-        <pre className="overflow-x-auto rounded-card border border-border bg-surface p-5 text-sm text-foreground shadow-glass backdrop-blur-glass">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-card border border-border bg-surface p-5 text-sm text-foreground shadow-glass backdrop-blur-glass">
           <code>{SNIPPET}</code>
         </pre>
 
