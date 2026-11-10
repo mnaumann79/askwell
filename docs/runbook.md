@@ -34,6 +34,18 @@ The body is the gateway's own plain text:
 upstream connect error or disconnect/reset before headers. retried and the latest reset reason: protocol error
 ```
 
+**The hashes are the hashes of that line.** Both sha256s in the table are what `sha256sum` prints for the body
+above — 110 bytes without a trailing newline, 111 with one:
+
+```bash
+printf '%s' "upstream connect error or disconnect/reset before headers. retried and the latest reset reason: protocol error" | sha256sum
+# f8ad80965ef3d2fb9ad4a3ea49272c02172d9f299cdedb418bb811988e007545  -
+```
+
+So a reader who suspects this body was misremembered does not need a project, a broken function or a network
+to check it: they need the line. The 502 itself cannot be produced on dev any more (§1.3) — this string and
+its hash are what is left of the measurement.
+
 **The length is measured, never declared.** The 502 carries **no `content-length` header at all**:
 
 - over **HTTP/2** the body ends with the stream — HTTP/2 has no chunking, so there is nothing to count
