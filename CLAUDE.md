@@ -54,8 +54,8 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 - Migrations are SQL files in `supabase/migrations`, named `<UTC timestamp>_<name>.sql`, newer than the latest one on `main`. Never edit a merged migration.
 - Every new table or function ships with its RLS policies and grants in the same migration (see `project.md` §7 and §9). Add a new table or column only if your task says so.
 - Test migrations, policies and functions on pglite (`packages/db/supabase-pglite.ts`). Never run a local Supabase stack or a Docker database.
-- The Supabase dev project is shared by every developer and every preview. Its data is throwaway, but never apply an unmerged migration to it. After your PR merges, apply it to dev through the Supabase MCP, recording the file's version, then regenerate the types (the MCP's type generator) and confirm there's no diff.
-- The Supabase MCP is scoped to the dev project. Never touch the production database. The product owner applies migrations to production before promoting the build.
+- The Supabase dev project is shared by every developer and every preview. Its data is throwaway, but never apply an unmerged migration to it. After your PR merges, apply it to dev with `SUPABASE_ACCESS_TOKEN` through the Management API (`POST https://api.supabase.com/v1/projects/<ref>/database/query`), recording the file's version under its own UTC timestamp, then regenerate the types with `pnpm db:types` and confirm there's no diff. The Supabase MCP is not the path: its tools need an authorisation the team does not have, and its token names a project that is not ours.
+- Never touch the production database. Only the dev project is ours to write to, and the product owner applies migrations to production before promoting the build.
 - Migrations are additive: the live version must keep working while one runs. Dropping or renaming a table or column happens in a later PR, once no deployed code uses it.
 
 ## Security rules
@@ -85,4 +85,4 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 |---|---|
 | `pnpm dev` | Run the app locally |
 | `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` | Checks. All must pass before a PR. |
-| `pnpm db:types` | Regenerate `packages/db/types.ts` from the dev project (needs `SUPABASE_ACCESS_TOKEN`; agents use the MCP's type generator instead) |
+| `pnpm db:types` | Regenerate `packages/db/types.ts` from the dev project (needs `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_ID`) |
