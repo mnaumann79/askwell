@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { getOrCreateAccount } from "../../lib/accounts";
 import { EmptyState } from "../../components/empty-state";
 import { GlassPanel } from "../../components/glass-panel";
-import { SIGN_IN_URL } from "../../lib/clerk/urls";
+import { DASHBOARD_URL, SIGN_IN_URL } from "../../lib/clerk/urls";
 
 /**
  * The dashboard home (docs/project.md §6.2).
@@ -10,6 +11,10 @@ import { SIGN_IN_URL } from "../../lib/clerk/urls";
  * Signing in for the first time creates the owner's `accounts` row. That
  * happens inside `getOrCreateAccount`, on the server, with the user id from
  * the Clerk session.
+ *
+ * The empty state leads to the projects page, which is the one place in Phase
+ * 2 where something can happen. It does not list the owner's projects itself:
+ * that belongs to Phase 4, with the usage and the conversations.
  */
 export default async function DashboardPage() {
   const { userId } = await auth.protect({ unauthenticatedUrl: SIGN_IN_URL });
@@ -27,7 +32,15 @@ export default async function DashboardPage() {
       <GlassPanel>
         <EmptyState
           title="Nothing here yet"
-          description="Your projects, the knowledge you add to them and the conversations they collect all show up here."
+          description="Your projects show up here. Create one and it gets its own widget."
+          action={
+            <Link
+              href={`${DASHBOARD_URL}/projects`}
+              className="rounded-card border border-border bg-surface-strong px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-border"
+            >
+              Create a project
+            </Link>
+          }
         />
       </GlassPanel>
     </div>

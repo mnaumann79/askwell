@@ -23,6 +23,13 @@ describe("dashboard page", () => {
     expect(html).toContain("Nothing here yet");
   });
 
+  it("leads to the projects page", async () => {
+    const html = await renderToHtml(<DashboardPage />);
+
+    expect(html).toContain('href="/dashboard/projects"');
+    expect(html).toContain("Create a project");
+  });
+
   it("shows the plan of the owner's account", async () => {
     const html = await renderToHtml(<DashboardPage />);
 
