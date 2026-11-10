@@ -222,6 +222,9 @@ It answers:
 Seven raises, every one of them `P0001`, and the five hint tokens of §1.5 are all in there. `match_chunks`
 raises nothing — that is what makes it the control in §1.2.
 
+Run against askwell-dev on 2026-11-10, the query answers exactly that table: seven raises, one distinct
+errcode, five distinct hints, and nothing outside them.
+
 **Who may execute them.** A refusal is called by the route with the service key, so `service_role` is the only
 role that may execute it — the visitor must not be able to call the function that refuses them. The check has
 to be **per entry**, because a grant to `PUBLIC` is written with an **empty** grantee, so the entry begins
@@ -245,7 +248,9 @@ check, because it looks like a result. The per-entry check needs the explicit `e
 cast to text implicitly.
 
 The eight functions answer two ACLs, and every one of them has an explicit, non-null `proacl` — the default
-for a function is EXECUTE to `PUBLIC`, so this is the exception and not the default:
+for a function is EXECUTE to `PUBLIC`, so this is the exception and not the default. Run against askwell-dev
+on 2026-11-10, the query answers exactly that: eight functions, two ACLs, and `0` `PUBLIC` entries on every
+row:
 
 | Functions                                                                                         | `proacl`                                                                 | `PUBLIC` entries |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------- |
@@ -263,10 +268,30 @@ everywhere, DEFINER only for the RLS helpers), and `owner_activity`, which is SE
 `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of the exposed API schema if signed-in
 users should not call it.
 
+**Where the findings come from.** The two advisor endpoints of askwell-dev, read with the same personal
+access token as the SQL above:
+
+```bash
+curl -sS "https://api.supabase.com/v1/projects/wpvdyclozjjnghrcafpf/advisors/security" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+curl -sS "https://api.supabase.com/v1/projects/wpvdyclozjjnghrcafpf/advisors/performance" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
+
+The security endpoint answers **two** findings, both `authenticated_security_definer_function_executable`,
+both WARN — one on `owned_project_ids`, one on `owned_conversation_ids`. The performance endpoint answers
+**three**, all `unused_index`, all INFO: `knowledge_chunks_embedding_hnsw_idx`, `messages_conversation_id_idx`
+and `knowledge_chunks_source_id_idx`. There is no ERROR among them. Read on 2026-11-10; the same numbers
+are in PR #18's body.
+
 It cannot be silenced **in place**: revoking the grant breaks the five policies, and switching the helpers to
 SECURITY INVOKER takes away the rows they exist to read. The lint's third remedy — moving them out of the
-exposed schema — would mean one migration and five policy rewrites, and it is with the product owner as an
-open decision. Until then the finding stands, and the grants table above is the answer to it.
+exposed schema — **would** silence it, at the price of one migration and five policy rewrites.
+
+**The finding stands by the product owner's decision of 2026-11-10: the two WARNs are accepted, by design.**
+They are the pair §9 expects to be executable, and the lint's third remedy is not wanted. The grants table
+above is the answer to them — `PUBLIC` may execute none of the eight functions, and only `authenticated`,
+for the five policies that call them, may execute the two helpers.
 
 ### 1.4 What it means
 
@@ -356,7 +381,7 @@ and the same numbers are in PR #18's body — GitHub does not truncate a body, s
 | The after-shape: 400, `application/json`, 103 bytes          | this runbook (§1.5) and [PR #12's comment](https://github.com/mnaumann79/askwell/pull/12#issuecomment-6773484242) |
 | The recipe's own answer today: 400, 115 bytes                | this runbook (§1.3) — a different refusal, so a different body                                                    |
 | What the deployed functions raise                            | this runbook (§1.3) — the `prosrc` query                                                                          |
-| The advisor findings, and the complete execute table         | [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                                                    |
+| The advisor findings, and the complete execute table         | this runbook (§1.3) and [PR #18's body](https://github.com/mnaumann79/askwell/pull/18)                            |
 | The two ACLs, and the grants to `PUBLIC`                     | this runbook (§1.3) and PR #18's body                                                                             |
 
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
