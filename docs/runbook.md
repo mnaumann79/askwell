@@ -387,6 +387,11 @@ and the same numbers are in PR #18's body — GitHub does not truncate a body, s
 The merged migration `20261110035018_plan_refusal_sqlstate.sql` still says "empty body" in three places.
 A merged migration is never edited, so it stays wrong on purpose and this runbook is the correction.
 
+**The measured facts live in the file, in the repo — not in the database.** A SQL comment is not stored
+with the function it belongs to: `obj_description` is empty for every function and `prosrc` holds only
+the body (§2.1). And the proof that a migration ran is `pg_proc.xmin`, the transaction that last wrote
+the catalog row (§2.2).
+
 ### 2.1 The facts are in the file, not in the database
 
 The row above says where the measured facts live: in the migration file, in the
