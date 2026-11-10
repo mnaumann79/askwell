@@ -216,9 +216,14 @@ everywhere, DEFINER only for the RLS helpers), and `owner_activity`, which is SE
 **The advisor's two WARNs are those two helpers, and they are the shape §9 asks for.** The lint
 `authenticated_security_definer_function_executable` names every SECURITY DEFINER function that
 `authenticated` may execute, and in `public` that is exactly `owned_project_ids` and
-`owned_conversation_ids` — the two the policies call. It cannot be silenced: revoking the grant breaks the
-five policies, and switching them to SECURITY INVOKER takes away the rows they exist to read. So the finding
-stays, and the grants table above is the answer to it.
+`owned_conversation_ids` — the two the policies call. Its own description offers three remedies: revoke
+`EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of the exposed API schema if signed-in
+users should not call it.
+
+It cannot be silenced **in place**: revoking the grant breaks the five policies, and switching the helpers to
+SECURITY INVOKER takes away the rows they exist to read. The lint's third remedy — moving them out of the
+exposed schema — would mean one migration and five policy rewrites, and it is with the product owner as an
+open decision. Until then the finding stands, and the grants table above is the answer to it.
 
 ### 1.4 What it means
 
