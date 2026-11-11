@@ -288,9 +288,11 @@ through.
 
 ### Against a preview whose snippet comes from the runtime origin
 
-`https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app`, built
-from the branch that builds the snippet from the origin the page was served
-from.
+`https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app`, this
+branch's preview, built from `main` with the snippet built from the origin the
+page is served from. The same run against the preview of that change,
+`https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app`, held the
+same way.
 
 The two answers are different, and the gap between them is the thing the check
 exists to catch. The HTML the deployment served carried the fallback — the
@@ -307,14 +309,14 @@ and the browser, once the page had hydrated, showed the origin the page was
 served from:
 
 ```html
-<script src="https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app/widget.js" data-key="pk_..."></script>
+<script src="https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app/widget.js" data-key="pk_..."></script>
 ```
 
 The check read the browser's answer, not the HTML's, and held:
 
 ```
-- The app's own landing page reported **https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app** as the snippet's origin.
-- The deployment under test is **https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app**.
+- The app's own landing page reported **https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app** as the snippet's origin.
+- The deployment under test is **https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app**.
 ```
 
 Nothing failed, and the run ended with exit code 0.
