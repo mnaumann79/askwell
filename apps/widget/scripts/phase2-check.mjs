@@ -11,6 +11,11 @@
  * the mock reply. It checks the things the phase says must hold and exits
  * non-zero when one of them does not.
  *
+ * Before that, it reads the app's own landing page. The snippet the owner
+ * copies comes from there, and a snippet that names another deployment is no
+ * use: the check reads the origin out of the page the browser rendered and
+ * fails when it is not the deployment under test.
+ *
  * Usage:
  *   node apps/widget/scripts/phase2-check.mjs --origin https://<the app> --key pk_...
  *
@@ -41,8 +46,25 @@ const TEMPLATE = path.join(scriptDir, "phase2-check.html");
 /** How long the browser is given for each step, in milliseconds. */
 const STEP_TIMEOUT = 20_000;
 
+/** How long the app's landing page is given to fill its snippet in. */
+const APP_SNIPPET_TIMEOUT = 10_000;
+
+/** How long the app's landing page is given to go quiet, before it is read. */
+const APP_PAGE_IDLE_TIMEOUT = 10_000;
+
 /** The question the check asks, so the panel answers with its mock reply. */
 const QUESTION = "What does this product do?";
+
+/** The install snippet's script tag, and the src it points at. */
+const SCRIPT_TAG = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>(?:\s*<\/script>)?/i;
+
+/**
+ * The src of the install snippet in a page's HTML.
+ *
+ * A page carries script tags of its own — the framework's chunks — so the
+ * snippet is found by the file it points at and not by the tag alone.
+ */
+const SCRIPT_SRC_IN_HTML = /src\s*=\s*["']([^"']*\/widget\.js)["']/i;
 
 /** The arguments. */
 function parseArgs(argv) {
@@ -169,6 +191,121 @@ async function waitFor(find, what, timeout = STEP_TIMEOUT) {
       throw new Error(`timed out waiting for ${what}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/** The origin of a URL, or null when the value is not one. */
+function originOf(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The src of the install snippet in a page's HTML, or null when there is none.
+ *
+ * The HTML carries the snippet as text, so the entities the renderer escapes
+ * are decoded first and the snippet reads the way the browser shows it.
+ */
+function snippetSrcFromHtml(html) {
+  const decoded = html
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&");
+
+  const match = SCRIPT_SRC_IN_HTML.exec(decoded);
+  return match ? match[1] : null;
+}
+
+/**
+ * The install snippet on the page, as the browser rendered it.
+ *
+ * The install section's rendered text is read, and the snippet is found in
+ * it: the text of a script element is not rendered, so the only script tag in
+ * the rendered text is the one the page shows. The whole page is read when
+ * the section is not there.
+ */
+async function readRenderedSnippet(page) {
+  const install = page.locator("#install");
+  const text =
+    (await install.count()) > 0
+      ? await install.innerText()
+      : await page.locator("body").innerText();
+
+  const match = SCRIPT_TAG.exec(text);
+
+  return match ? { snippet: match[0].trim(), src: match[1] } : null;
+}
+
+/**
+ * The app's own landing page, and the origin its snippet names.
+ *
+ * The landing page is public and static, so reading it needs no session and
+ * no credential — the protection's header is all it takes. The page is
+ * opened in a browser of its own: the browser that loads the widget must not
+ * carry the header, or the browser would send a preflight the config route
+ * does not answer.
+ *
+ * The snippet is read from the **rendered** page, not from the HTML. The
+ * server's HTML carries the fallback — the env var, or `your-app.example` —
+ * and the browser fills in the origin the page was served from. So the page
+ * is read until the snippet differs from the server's, which is the moment
+ * the browser has filled it in. The wait ends early when the snippet already
+ * names this deployment: there is nothing left to fill in.
+ *
+ * @returns {Promise<{ snippet: string, src: string, origin: string | null } | null>}
+ */
+async function readAppSnippet(browser, origin, deploymentOrigin, headers) {
+  const context = await browser.newContext({
+    viewport: { width: 375, height: 720 },
+    extraHTTPHeaders: headers,
+  });
+
+  try {
+    const page = await context.newPage();
+
+    // The server's own HTML, and the fallback that is in it.
+    let serverSrc = null;
+    try {
+      const response = await fetch(`${origin}/`, { headers });
+      serverSrc = snippetSrcFromHtml(await response.text());
+    } catch {
+      // The page below has the last word.
+    }
+
+    await page.goto(`${origin}/`, { waitUntil: "load", timeout: STEP_TIMEOUT });
+    await page.waitForLoadState("networkidle", { timeout: APP_PAGE_IDLE_TIMEOUT }).catch(() => {});
+
+    const deadline = Date.now() + APP_SNIPPET_TIMEOUT;
+    let last = null;
+
+    for (;;) {
+      const rendered = await readRenderedSnippet(page);
+
+      if (rendered) {
+        last = rendered;
+        const reported = originOf(rendered.src);
+
+        if ((serverSrc !== null && rendered.src !== serverSrc) || reported === deploymentOrigin) {
+          return { ...rendered, origin: reported };
+        }
+      }
+
+      if (Date.now() >= deadline) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    return last ? { ...last, origin: originOf(last.src) } : null;
+  } finally {
+    await context.close();
   }
 }
 
@@ -406,12 +543,20 @@ async function main() {
 
   const origin = options.origin.replace(/\/+$/, "");
   const key = options.key;
+  const deploymentOrigin = originOf(origin);
 
   // The app, in front of the preview: a protected deployment cannot be read
   // by a browser on another origin, and the proxy is where the protection's
   // header is added.
   const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   const bypassHeaders = bypass ? { "x-vercel-protection-bypass": bypass } : {};
+
+  // The browser that reads the app's own landing page carries the cookie as
+  // well: the page is a document request, and the protection answers that
+  // with its handshake.
+  const browserHeaders = bypass
+    ? { "x-vercel-protection-bypass": bypass, "x-vercel-set-bypass-cookie": "true" }
+    : {};
 
   const appProxy = await startAppProxy(origin, options.appPort, bypassHeaders);
   const appOrigin = `http://127.0.0.1:${options.appPort}`;
@@ -465,6 +610,38 @@ async function main() {
   const servedFrom = `http://127.0.0.1:${options.port}/`;
 
   const browser = await playwright.chromium.launch();
+
+  // The app's own landing page, and the snippet the owner copies. The snippet
+  // has to name the deployment under test: a snippet that names another
+  // deployment is no use, and no check of the widget can tell.
+  let appSnippet = null;
+  let appSnippetError = null;
+
+  try {
+    appSnippet = await readAppSnippet(browser, origin, deploymentOrigin, browserHeaders);
+  } catch (error) {
+    appSnippetError = error instanceof Error ? error.message : String(error);
+  }
+
+  if (appSnippetError) {
+    report.error(`the app's own landing page could not be read: ${appSnippetError}`);
+  } else if (!appSnippet) {
+    report.check(
+      "the app's own landing page shows an install snippet",
+      false,
+      "no snippet was found on the page",
+    );
+  } else {
+    report.marker("The app's own install snippet, as the browser rendered it", appSnippet.snippet);
+
+    report.check(
+      "the app's own landing page shows a snippet for this deployment",
+      appSnippet.origin === deploymentOrigin,
+      appSnippet.origin
+        ? `the app's page reported ${appSnippet.origin}, the deployment under test is ${deploymentOrigin}`
+        : `the snippet's src is "${appSnippet.src}", which is not an origin`,
+    );
+  }
 
   // No bypass header from the browser: the proxy adds it. A header the browser
   // does not send by itself would make it send a preflight first, and the
@@ -638,6 +815,16 @@ async function main() {
   );
   console.log(`- The key was **${key}**.`);
   console.log(`- The config route answered **${configStatus}**: ${configText.slice(0, 300)}`);
+
+  if (appSnippetError) {
+    console.log(`- The app's own landing page could not be read: **${appSnippetError}**.`);
+  } else {
+    console.log(
+      `- The app's own landing page reported **${appSnippet?.origin ?? "no snippet at all"}** as the snippet's origin.`,
+    );
+  }
+
+  console.log(`- The deployment under test is **${deploymentOrigin}**.`);
   console.log("");
 
   for (const marker of report.markers) {

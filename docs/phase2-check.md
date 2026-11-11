@@ -18,6 +18,38 @@ not.
 The page is `apps/widget/scripts/phase2-check.html`: the install snippet and
 nothing else — no framework, no bundler, no script of its own.
 
+Before that, the check reads the app's own landing page. That is where the
+snippet the owner copies comes from, and a snippet that names another
+deployment is no use: the check reads the origin out of the page the browser
+rendered and fails when it is not the deployment under test.
+
+## The app's own landing page
+
+The landing page is public and statically prerendered, so reading it needs
+**no session and no credential** — only the protection's header, which the run
+needs anyway for the config route.
+
+The snippet is read from the **rendered** page, not from the HTML. The
+server's HTML carries the fallback — the env var, or `your-app.example` — and
+the browser fills in the origin the page was served from. So the check reads
+the page until the snippet differs from the server's, which is the moment the
+browser has filled it in. The wait ends early when the snippet already names
+this deployment: there is nothing left to fill in.
+
+The landing page's snippet is **never** used for the load. Its key is the
+illustrative `pk_...`, and a bad key renders nothing. The load keeps the key
+the check was given, and the proxy origin — a protected deployment cannot be
+loaded straight from a browser on another origin, which is why the proxy is
+there.
+
+Every run says which origin the app's page reported, next to the deployment
+under test:
+
+```
+- The app's own landing page reported **https://your-app.example** as the snippet's origin.
+- The deployment under test is **https://askwell-git-check-phase2-preview-mnaumann79s-projects.vercel.app**.
+```
+
 ## How to run it
 
 ```bash
@@ -53,6 +85,7 @@ Two more things the run needs:
 
 | The deployment must have | Or the check fails with                                      |
 | ------------------------ | ------------------------------------------------------------ |
+| `GET /`                  | "the app's own landing page shows an install snippet"        |
 | `GET /api/widget/config` | "the config route answers 200 for the key — it answered 404" |
 | `GET /widget.js`         | "the widget renders a button"                                |
 | `GET /embed?key=…`       | "the click opens the panel"                                  |
@@ -222,6 +255,73 @@ The exchange, as the browser rendered it:
 
 The screenshot is at `/tmp/askwell-phase2-check/widget.png` — Chromium, headless,
 375 px wide, the page at `http://127.0.0.1:4173/`.
+
+## The run of 2026-11-11
+
+Two runs, against two deployments, with the key
+`pk_8ef8ea2f81ae46d88fcb81cd47c83526`.
+
+### Against a preview built from `main`
+
+`https://askwell-git-check-phase2-preview-mnaumann79s-projects.vercel.app`.
+
+The config route answered **200**, the button rendered with the config's
+label, colour and position, the click opened the panel, and the mock reply
+came back. One thing did not hold:
+
+```
+## What did not hold
+
+- the app's own landing page shows a snippet for this deployment — the app's page reported https://your-app.example, the deployment under test is https://askwell-git-check-phase2-preview-mnaumann79s-projects.vercel.app
+```
+
+The snippet, as the browser rendered it:
+
+```html
+<script src="https://your-app.example/widget.js" data-key="pk_..."></script>
+```
+
+That deployment was built before the Preview scope had `NEXT_PUBLIC_APP_URL`,
+so the snippet fell back to `https://your-app.example` — the placeholder. That
+is what an owner copies, and the check now says so instead of letting it
+through.
+
+### Against a preview whose snippet comes from the runtime origin
+
+`https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app`, built
+from the branch that builds the snippet from the origin the page was served
+from.
+
+The two answers are different, and the gap between them is the thing the check
+exists to catch. The HTML the deployment served carried the fallback — the
+Preview scope's `NEXT_PUBLIC_APP_URL`, which names another deployment:
+
+```console
+$ curl -sSL -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+    https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app/ \
+  | grep -o 'src=[^ ]\{0,70\}widget\.js' | head -1
+src=&quot;https://askwell-mnaumann79s-projects.vercel.app/widget.js
+```
+
+and the browser, once the page had hydrated, showed the origin the page was
+served from:
+
+```html
+<script src="https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app/widget.js" data-key="pk_..."></script>
+```
+
+The check read the browser's answer, not the HTML's, and held:
+
+```
+- The app's own landing page reported **https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app** as the snippet's origin.
+- The deployment under test is **https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app**.
+```
+
+Nothing failed, and the run ended with exit code 0.
+
+A deployment whose snippet is a build-time constant that names another
+deployment still fails — that is the bug the check is for, not a defect in the
+check.
 
 ## What the run found, and what was done about it
 
