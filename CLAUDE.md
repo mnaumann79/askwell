@@ -25,6 +25,7 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 - Run all checks (see Commands). All must pass.
 - PR body: what changed, how you tested, and the task's done-when list with each item checked or explained.
 - Vercel deploys a preview of every PR. Check your change on it, and put the preview URL in the PR. If the repo isn't connected to Vercel yet (early Phase 0), say so in the PR and skip this check.
+- **CodeRabbit reviews every pull request.** Wait for its review, answer every thread it opens, and fix what it finds — or reply with the reason when a comment is wrong.
 
 ## Checking your change on a Vercel preview
 
@@ -42,7 +43,8 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 
 ## Reviews and your next task
 
-- Fix every valid lead comment on the same branch. If a comment is wrong, reply on the PR with the reason. Answer every thread.
+- **No pull request merges without a CodeRabbit review.** The lead waits for it, and every thread it opened is answered before the merge.
+- Fix every valid CodeRabbit or lead comment on the same branch. If a comment is wrong, reply on the PR with the reason. Answer every thread.
 - Once your PR is open, the lead may give you your next task. Take it on a new branch from `main`.
 - When review comments arrive on an earlier PR, switch back to that branch, fix, push, and return. Don't call `set_my_status` for the earlier task: it would update your current one. HQ tracks the earlier PR by itself.
 - Never start a task that needs code from one of your open PRs. If nothing independent is ready, say so.

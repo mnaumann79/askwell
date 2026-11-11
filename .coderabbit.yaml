@@ -1,0 +1,77 @@
+# CodeRabbit's configuration for this repository.
+#
+# The reference for every key: docs.coderabbit.ai/reference/configuration
+#
+# The team's own rules live in CLAUDE.md at the root. CodeRabbit reads that
+# file automatically as review criteria, so they are not repeated here. What
+# is below is only what the file does not say: how CodeRabbit reviews, and
+# where the rules of one part of the repository differ from the rest.
+
+language: "en-US"
+
+reviews:
+  # Balanced feedback. "assertive" is nitpicky for this codebase, and
+  # "quiet" misses what we want caught.
+  profile: "chill"
+
+  # Every pull request is reviewed, and it keeps being reviewed: the default
+  # pauses the automatic review after five reviewed commits, which would let
+  # the last commits of a long pull request through unreviewed.
+  auto_review:
+    enabled: true
+    auto_pause_after_reviewed_commits: 0
+
+  # CodeRabbit's approval is the gate. It approves once its findings are
+  # resolved and the latest commit has been reviewed, so a pull request
+  # cannot merge without that review having happened.
+  auto_approvals:
+    enabled: true
+    # The author cannot wave their own pull request through with a command.
+    allow_author_approval: false
+
+  # The generated types are not ours to review.
+  path_filters:
+    - "!packages/db/types.ts"
+
+  # Where the rules differ from the root file's.
+  path_instructions:
+    - path: "apps/web/app/api/**"
+      instructions: |
+        Every route validates its input with the zod schema in packages/shared
+        and never redefines it. Errors answer { error: { code, message } } with
+        the status from API_ERROR_STATUS. The plan is read on the server in
+        every gated action, never from the client. An owner route checks
+        ownership before any write through the service client. A public widget
+        route allows any origin and carries its CORS headers on the refusals
+        too, so a caller on another origin can read them.
+    - path: "apps/web/lib/**"
+      instructions: |
+        Owner reads go through the owner client, so RLS scopes them. The
+        service client is used only after the route has checked ownership and
+        the plan. The secret key is read only by lib/supabase/service.ts, which
+        imports "server-only".
+    - path: "apps/web/components/**"
+      instructions: |
+        Follow docs/project.md §13. Reuse the components in apps/web/components
+        rather than writing a second one. The app name comes from APP_NAME in
+        packages/shared and is never hardcoded.
+    - path: "apps/widget/**"
+      instructions: |
+        The loader runs on the customer's site: the button lives in a shadow
+        root, there is no global CSS, and every postMessage is checked with
+        event.origin. Visitor messages and bot replies are rendered as text,
+        never as HTML. The bundle carries no secret and no NEXT_PUBLIC_* value.
+    - path: "supabase/migrations/**"
+      instructions: |
+        Every new table or function ships with its RLS policies and grants in
+        the same file. anon gets nothing, and TRUNCATE is revoked from the API
+        roles. Functions are SECURITY INVOKER with search_path = '' unless they
+        are the RLS helpers. A migration is additive: the live version keeps
+        working while one runs. Never edit a merged migration.
+
+knowledge_base:
+  code_guidelines:
+    # CLAUDE.md at the root is the team's rules; CodeRabbit reads it as
+    # review criteria. This says so out loud rather than leaving it to the
+    # default detection.
+    enabled: true
