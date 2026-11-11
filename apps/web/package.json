@@ -21,6 +21,7 @@
     "server-only": "0.0.1"
   },
   "devDependencies": {
+    "@askwell/db": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

@@ -1,5 +1,3 @@
-import type { SupabaseClientOptions } from "@supabase/supabase-js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyMigrations,
   actAs,
@@ -7,7 +5,9 @@ import {
   createTestDb,
   query,
   stubSupabaseRoles,
-} from "../../../../packages/db/supabase-pglite";
+} from "@askwell/db/pglite";
+import type { SupabaseClientOptions } from "@supabase/supabase-js";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
