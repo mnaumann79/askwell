@@ -8,7 +8,23 @@ const { createClientMock } = vi.hoisted(() => ({
     vi.fn<(url: string, key: string, options: SupabaseClientOptions<"public">) => unknown>(),
 }));
 
+const { arcjetMock, protectMock } = vi.hoisted(() => {
+  const protect = vi.fn();
+
+  const client = (protect: unknown) => ({
+    protect,
+    withRule: () => client(protect),
+  });
+
+  return { arcjetMock: vi.fn(() => client(protect)), protectMock: protect };
+});
+
 vi.mock("@supabase/supabase-js", () => ({ createClient: createClientMock }));
+vi.mock("@arcjet/next", () => ({
+  default: arcjetMock,
+  slidingWindow: vi.fn(() => ["rate-limit"]),
+  detectPromptInjection: vi.fn(() => ["injection"]),
+}));
 // `server-only` throws outside a React Server Component. Next.js resolves it
 // to an empty module there; the test needs the same.
 vi.mock("server-only", () => ({}));
@@ -20,6 +36,25 @@ const SECRET_KEY = "sb_secret_a_secret_value";
 const PUBLIC_KEY = `pk_${"a".repeat(32)}`;
 const PROJECT_ID = "3f2b1a44-9c1e-4a5b-8d2e-1f0a2b3c4d5e";
 const OWNER_ID = "user_123";
+const ARCJET_KEY = "ajkey_a_test_key";
+
+/** A decision of the fake Arcjet that lets the request through. */
+function allowed() {
+  return {
+    isDenied: () => false,
+    isErrored: () => false,
+    reason: { isRateLimit: () => false, isPromptInjection: () => false },
+  };
+}
+
+/** A decision of the fake Arcjet that refuses the request. */
+function rateLimited() {
+  return {
+    isDenied: () => true,
+    isErrored: () => false,
+    reason: { isRateLimit: () => true, isPromptInjection: () => false },
+  };
+}
 
 const PROJECT_ROW = { id: PROJECT_ID, owner_id: OWNER_ID };
 
@@ -103,12 +138,15 @@ describe("GET /api/widget/config", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = URL;
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = PUBLISHABLE_KEY;
     process.env.SUPABASE_SECRET_KEY = SECRET_KEY;
+    process.env.ARCJET_KEY = ARCJET_KEY;
+    protectMock.mockResolvedValue(allowed());
   });
 
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     delete process.env.SUPABASE_SECRET_KEY;
+    delete process.env.ARCJET_KEY;
   });
 
   it("answers the defaults and the badge for a free project", async () => {
@@ -267,5 +305,61 @@ describe("GET /api/widget/config", () => {
 
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("refuses with 429 when the limit is over", async () => {
+    protectMock.mockResolvedValue(rateLimited());
+    const { client } = fakeClient((call) => {
+      if (call.table === "projects") {
+        return { data: PROJECT_ROW, error: null };
+      }
+      return { data: { plan: "free" }, error: null };
+    });
+    createClientMock.mockImplementation(() => client);
+
+    const response = await GET(configRequest(PUBLIC_KEY));
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.error.code).toBe("rate_limited");
+  });
+
+  it("keeps the CORS headers on the refusal", async () => {
+    // A loader on another origin that cannot read the answer sees a network
+    // error instead of the 429, and then it cannot tell that the limit is
+    // the problem.
+    protectMock.mockResolvedValue(rateLimited());
+
+    const response = await GET(configRequest(PUBLIC_KEY));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("does not read the database when the limit is over", async () => {
+    protectMock.mockResolvedValue(rateLimited());
+
+    await GET(configRequest(PUBLIC_KEY));
+
+    // The limit is on the route itself, before anything is read.
+    expect(createClientMock).not.toHaveBeenCalled();
+  });
+
+  it("answers when there is no Arcjet key", async () => {
+    // Without a key the limit cannot be enforced. The code fails open on
+    // purpose: a missing key must not take the widget down.
+    delete process.env.ARCJET_KEY;
+    const { client } = fakeClient((call) => {
+      if (call.table === "projects") {
+        return { data: PROJECT_ROW, error: null };
+      }
+      return { data: { plan: "free" }, error: null };
+    });
+    createClientMock.mockImplementation(() => client);
+
+    const response = await GET(configRequest(PUBLIC_KEY));
+
+    expect(response.status).toBe(200);
+    expect(protectMock).not.toHaveBeenCalled();
   });
 });

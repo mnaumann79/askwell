@@ -5,6 +5,7 @@ import {
   type ApiErrorCode,
   type WidgetConfigResponse,
 } from "@askwell/shared";
+import { guardPublicRequest } from "../../../../lib/arcjet";
 import { readWidgetConfig } from "../../../../lib/widget";
 
 /**
@@ -46,6 +47,16 @@ function errorResponse(code: ApiErrorCode, message: string): Response {
 /** `GET /api/widget/config?key=pk_...` - the plan-applied config. */
 export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get("key");
+
+  // The limit is on the route itself and before anything is read: a request
+  // that is over the limit must not reach the database (§9). The route
+  // carries no message, so only the limit applies here.
+  const guard = await guardPublicRequest({ request, publicKey: key });
+
+  if (guard.blocked) {
+    return errorResponse(guard.code, guard.message);
+  }
+
   const parsed = widgetConfigQuerySchema.safeParse({ key });
 
   if (!parsed.success) {
