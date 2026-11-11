@@ -5,7 +5,8 @@ import type { PostgrestError } from "@supabase/supabase-js";
  * The refusal of the plan limits, and the answer the route builds from it
  * (docs/project.md §5, §9).
  *
- * `create_project` raises `P0001` and puts the reason in the `hint`. The
+ * `create_project` and `reserve_knowledge_source` raise `P0001` and put the
+ * reason in the `hint`. The
  * Data API answers 400 and hands the code, the message, the details and the
  * hint through. The route maps the hint to its own error code and builds its
  * own answer: the 400 is never passed on, because the Data API and the
@@ -18,9 +19,13 @@ const HINT_ANSWERS: Record<string, { code: ApiErrorCode; message: string }> = {
     code: "conflict",
     message: "This plan does not allow another project.",
   },
+  plan_limit_knowledge: {
+    code: "conflict",
+    message: "This plan does not allow another knowledge source.",
+  },
   no_account_or_project: {
     code: "internal_error",
-    message: "Could not create the project.",
+    message: "Could not find the account or the project.",
   },
 };
 
@@ -40,8 +45,13 @@ export class PlanRefusalError extends Error {
  *
  * A hint we do not know is never guessed: it is logged and answered as an
  * internal error, so a refusal nobody wrote cannot be answered as one we did.
+ * The message of that answer is the caller's: the same hint means something
+ * else in another lane.
  */
-export function refusalFrom(error: PostgrestError): PlanRefusalError {
+export function refusalFrom(
+  error: PostgrestError,
+  fallbackMessage = "Could not create the project.",
+): PlanRefusalError {
   const hint = error.hint ?? "";
   const answer = HINT_ANSWERS[hint];
 
@@ -56,5 +66,5 @@ export function refusalFrom(error: PostgrestError): PlanRefusalError {
     message: error.message,
   });
 
-  return new PlanRefusalError("internal_error", "Could not create the project.");
+  return new PlanRefusalError("internal_error", fallbackMessage);
 }
