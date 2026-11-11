@@ -28,6 +28,18 @@ const EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 /** How many texts go into one request. */
 const EMBEDDING_BATCH_SIZE = 64;
 
+/**
+ * How long the embeddings may take, in total.
+ *
+ * The route gives the function 60 seconds (`maxDuration`), so the embeddings
+ * get 45 of them and the rest is for the cleanup: a source that fails has to
+ * be marked as failed and its chunks removed before the function ends. An
+ * embedding call that outlives its deadline is aborted, so the source is
+ * marked as failed instead of being left in `processing` by a killed
+ * invocation.
+ */
+const EMBEDDINGS_DEADLINE_MS = 45_000;
+
 /** The `knowledge_sources` row the lane reads and writes (§7). */
 export type KnowledgeSourceRow = {
   id: string;
@@ -171,31 +183,49 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     throw new Error("OPENAI_API_KEY is not set.");
   }
 
+  const deadline = Date.now() + EMBEDDINGS_DEADLINE_MS;
   const embeddings: number[][] = [];
 
   for (let start = 0; start < texts.length; start += EMBEDDING_BATCH_SIZE) {
     const batch = texts.slice(start, start + EMBEDDING_BATCH_SIZE);
+    const remaining = deadline - Date.now();
 
-    embeddings.push(...(await embedBatch(key, batch)));
+    if (remaining <= 0) {
+      throw new Error("The embeddings took too long.");
+    }
+
+    embeddings.push(...(await embedBatch(key, batch, remaining)));
   }
 
   return embeddings;
 }
 
 /** One request to the embeddings endpoint. */
-async function embedBatch(key: string, inputs: string[]): Promise<number[][]> {
-  const response = await fetch(EMBEDDINGS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      dimensions: EMBEDDING_DIMENSIONS,
-      input: inputs,
-    }),
-  });
+async function embedBatch(key: string, inputs: string[], timeoutMs: number): Promise<number[][]> {
+  let response: Response;
+
+  try {
+    response = await fetch(EMBEDDINGS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        dimensions: EMBEDDING_DIMENSIONS,
+        input: inputs,
+      }),
+      // The request does not get more time than the deadline leaves.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error("The embeddings request took too long.", { cause: error });
+    }
+
+    throw error;
+  }
 
   if (!response.ok) {
     throw new Error(`The embeddings request failed with the status ${response.status}.`);
@@ -251,6 +281,26 @@ function readEmbeddings(body: unknown): number[][] {
     return { index: typeof index === "number" ? index : position, embedding };
   });
 
+  // The index says which text an embedding belongs to. Every index has to be
+  // a position of the batch and it has to be there once: a repeated or an
+  // out-of-range index would hand a chunk the embedding of another chunk.
+  const indexes = new Set<number>();
+
+  for (const item of items) {
+    if (
+      !Number.isInteger(item.index) ||
+      item.index < 0 ||
+      item.index >= items.length ||
+      indexes.has(item.index)
+    ) {
+      throw new Error(
+        "The embeddings answer carries an index that is not a position of the batch.",
+      );
+    }
+
+    indexes.add(item.index);
+  }
+
   return items
     .sort((left, right) => left.index - right.index)
     .map((item) => item.embedding as number[]);
@@ -299,9 +349,12 @@ export async function processKnowledgeSource(input: {
   const client = createServiceClient();
   const sourceId = input.source.id;
 
-  await setSourceStatus(client, sourceId, "processing");
-
   try {
+    // The status update is inside the guarded path: a source whose first
+    // update fails is marked as failed like any other failure, instead of
+    // being left in `uploading` while it holds a plan slot.
+    await setSourceStatus(client, sourceId, "processing");
+
     const chunks = chunkText(input.content);
 
     if (chunks.length === 0) {
@@ -335,12 +388,18 @@ export async function processKnowledgeSource(input: {
 
     return toKnowledgeSource({ ...input.source, status: "ready" });
   } catch (error) {
+    // The two steps are separate: a failure to remove the chunks may not keep
+    // the source from being marked as failed.
     try {
       await deleteChunks(client, sourceId);
+    } catch (cleanupError) {
+      console.error("Could not remove the chunks of the failed source", cleanupError);
+    }
+
+    try {
       await setSourceStatus(client, sourceId, "failed");
     } catch (cleanupError) {
-      // The failure of the pipeline is the one the caller has to hear about.
-      console.error("Could not clean up the failed source", cleanupError);
+      console.error("Could not mark the source as failed", cleanupError);
     }
 
     throw error;

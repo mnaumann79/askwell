@@ -37,6 +37,16 @@ const projectIdSchema = projectSchema.shape.id;
 
 const NOT_FOUND = "There is no such project.";
 
+/**
+ * How long the function may run.
+ *
+ * The paste is embedded before the answer is sent, so the function needs the
+ * time: the embeddings have a deadline of their own (45 seconds, in
+ * `lib/knowledge/process.ts`) and the rest is for the cleanup of a source
+ * that fails.
+ */
+export const maxDuration = 60;
+
 /** `POST /api/projects/:id/knowledge` - pastes a text into the project. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();

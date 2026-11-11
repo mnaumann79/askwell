@@ -45,11 +45,15 @@ const SOURCE: KnowledgeSourceRow = {
   created_at: "2026-11-11T09:30:00+00:00",
 };
 
+/** A text that becomes two chunks. */
+const TWO_CHUNKS = `${"a".repeat(600)}\n\n${"b".repeat(600)}`;
+
 type FakeCall = {
   table: string;
   op: "select" | "update" | "insert" | "delete";
   payload?: unknown;
   filters: [string, unknown][];
+  error?: { message: string } | null;
 };
 
 type FakeResult = { data: unknown; error: { message: string } | null };
@@ -67,6 +71,9 @@ type FakeBuilder = {
   ): Promise<TResult1 | TResult2>;
 };
 
+/** How many of the status updates the client fails. */
+let failStatusUpdates = 0;
+
 /** A stand-in for the Supabase client that records the queries it is given. */
 function fakeClient(calls: FakeCall[]) {
   const client = {
@@ -81,6 +88,12 @@ function fakeClient(calls: FakeCall[]) {
         update(payload) {
           call.op = "update";
           call.payload = payload;
+
+          if (failStatusUpdates > 0) {
+            failStatusUpdates -= 1;
+            call.error = { message: "the status could not be set" };
+          }
+
           return builder;
         },
         insert(payload) {
@@ -97,10 +110,13 @@ function fakeClient(calls: FakeCall[]) {
           return builder;
         },
         maybeSingle() {
-          return Promise.resolve({ data: null, error: null });
+          return Promise.resolve({ data: null, error: call.error ?? null });
         },
         then(onfulfilled, onrejected) {
-          return Promise.resolve({ data: null, error: null }).then(onfulfilled, onrejected);
+          return Promise.resolve({ data: null, error: call.error ?? null }).then(
+            onfulfilled,
+            onrejected,
+          );
         },
       };
 
@@ -140,12 +156,32 @@ function stubEmbeddings(): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
+/** The embeddings endpoint answers with indexes the pipeline cannot trust. */
+function stubEmbeddingsWithIndexes(indexes: number[]): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: indexes.map((index) => ({
+              index,
+              embedding: Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0),
+            })),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    ),
+  );
+}
+
 describe("processKnowledgeSource", () => {
   const calls: FakeCall[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
     calls.length = 0;
+    failStatusUpdates = 0;
     process.env.NEXT_PUBLIC_SUPABASE_URL = URL;
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = PUBLISHABLE_KEY;
     process.env.SUPABASE_SECRET_KEY = SECRET_KEY;
@@ -241,6 +277,60 @@ describe("processKnowledgeSource", () => {
 
     expect(statuses).toEqual(["processing", "failed"]);
     expect(callsTo(calls, "knowledge_chunks").map((call) => call.op)).toContain("delete");
+  });
+
+  it("gives the embeddings request a deadline", async () => {
+    await processKnowledgeSource({
+      projectId: PROJECT_ID,
+      source: SOURCE,
+      content: "The starter plan costs 10 euros a month.",
+    });
+
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+
+    expect(init.signal).toBeDefined();
+  });
+
+  it("marks the source failed when the first status update fails", async () => {
+    // The first update is the one to `processing`. When it fails, the source
+    // may not be left in `uploading` while it holds a plan slot.
+    failStatusUpdates = 1;
+
+    await expect(
+      processKnowledgeSource({
+        projectId: PROJECT_ID,
+        source: SOURCE,
+        content: "The starter plan costs 10 euros a month.",
+      }),
+    ).rejects.toThrow(/could not set the status/i);
+
+    const statuses = callsTo(calls, "knowledge_sources").map(
+      (call) => (call.payload as { status: string }).status,
+    );
+
+    expect(statuses).toEqual(["processing", "failed"]);
+  });
+
+  it("refuses an answer that repeats an index", async () => {
+    stubEmbeddingsWithIndexes([0, 0]);
+
+    await expect(
+      processKnowledgeSource({ projectId: PROJECT_ID, source: SOURCE, content: TWO_CHUNKS }),
+    ).rejects.toThrow(/index that is not a position/);
+
+    const statuses = callsTo(calls, "knowledge_sources").map(
+      (call) => (call.payload as { status: string }).status,
+    );
+
+    expect(statuses).toEqual(["processing", "failed"]);
+  });
+
+  it("refuses an index that is outside the batch", async () => {
+    stubEmbeddingsWithIndexes([0, 5]);
+
+    await expect(
+      processKnowledgeSource({ projectId: PROJECT_ID, source: SOURCE, content: TWO_CHUNKS }),
+    ).rejects.toThrow(/index that is not a position/);
   });
 });
 

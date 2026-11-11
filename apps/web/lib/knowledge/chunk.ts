@@ -129,7 +129,17 @@ function overlapOf(previous: string, room: number): string {
   const tail = last.slice(last.length - limit);
   const cut = tail.search(WHITESPACE);
 
-  return cut === -1 ? tail : tail.slice(cut + 1).trimStart();
+  if (cut === -1) {
+    // The tail has no whitespace in it: it is the end of one long word. The
+    // overlap may not begin in the middle of a word, so there is no overlap
+    // - unless the tail begins at a word boundary, which is the case when
+    // the character before it is a space.
+    const before = last.charAt(last.length - limit - 1);
+
+    return WHITESPACE.test(before) ? tail : "";
+  }
+
+  return tail.slice(cut + 1).trimStart();
 }
 
 /**

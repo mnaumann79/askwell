@@ -105,6 +105,26 @@ describe("chunkText", () => {
     expect(chunkText(word)).toEqual([word]);
   });
 
+  it("never begins a chunk in the middle of a long word", () => {
+    // The overlap of the second chunk would be the last 200 characters of the
+    // long word: a chunk may not begin in the middle of a word, so there is
+    // no overlap.
+    const chunks = chunkText(`${"x".repeat(TARGET_CHUNK_CHARACTERS + 1)} y`);
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]).toBe("y");
+  });
+
+  it("keeps an overlap that begins at a word boundary", () => {
+    // The last word of the first chunk is exactly as long as the overlap, so
+    // the overlap is the whole word and not a part of it.
+    const first = `${"z".repeat(700)} ${"q".repeat(OVERLAP_CHARACTERS)}`;
+    const chunks = chunkText(`${first}\n\n${"b".repeat(400)}`);
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]?.startsWith("q".repeat(OVERLAP_CHARACTERS))).toBe(true);
+  });
+
   it("reads the line endings of the text as they are", () => {
     const chunks = chunkText("One.\r\n\r\nTwo.");
 
