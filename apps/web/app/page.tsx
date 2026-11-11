@@ -13,8 +13,8 @@ import { Footer } from "../components/landing/footer";
  * install snippet, footer.
  *
  * It is static: no widget runs here yet (that arrives in Phase 6), nothing
- * is fetched, and the only client-side code is the copy button on the
- * install snippet.
+ * is fetched, and the only client-side code is on the install section: the
+ * copy button, and the origin the snippet names.
  */
 export default function HomePage() {
   return (

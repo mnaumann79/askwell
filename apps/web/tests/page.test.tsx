@@ -1,7 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { APP_NAME, PLAN_LIMITS } from "@askwell/shared";
 import HomePage from "../app/page";
+
+const APP_URL = "https://askwell.example";
+
+beforeEach(() => {
+  delete process.env.NEXT_PUBLIC_APP_URL;
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_APP_URL;
+});
 
 describe("landing page", () => {
   it("shows the app name from @askwell/shared", () => {
@@ -61,5 +71,19 @@ describe("landing page", () => {
 
     expect(html).toContain("widget.js");
     expect(html).toContain("data-key=");
+  });
+
+  it("carries the app url in the static HTML, the fallback of the server", () => {
+    process.env.NEXT_PUBLIC_APP_URL = APP_URL;
+
+    const html = renderToStaticMarkup(<HomePage />);
+
+    expect(html).toContain(`${APP_URL}/widget.js`);
+  });
+
+  it("carries the placeholder in the static HTML when the app url is not set", () => {
+    const html = renderToStaticMarkup(<HomePage />);
+
+    expect(html).toContain("https://your-app.example/widget.js");
   });
 });
