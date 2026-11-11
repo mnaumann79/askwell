@@ -26,7 +26,7 @@ Your task (from `get_my_task`) lists the `project.md` sections it needs. Read th
 - PR body: what changed, how you tested, and the task's done-when list with each item checked or explained.
 - Vercel deploys a preview of every PR. Check your change on it, and put the preview URL in the PR. If the repo isn't connected to Vercel yet (early Phase 0), say so in the PR and skip this check.
 - **CodeRabbit reviews every pull request.** Wait for its review, answer every thread it opens, and fix what it finds — or reply with the reason when a comment is wrong.
-- **Merge `main` into your branch before you ask for a review.** CodeRabbit reads its configuration from the branch under review. A branch that does not carry `.coderabbit.yaml` is reviewed with the defaults, which never approve a pull request — and since every pull request here is authored by the same account, no person can approve it either. The merge then waits forever. `git merge origin/main` is enough; never rebase or force-push a branch under review.
+- **Merge `main` into your branch before you ask for a review.** CodeRabbit reads its configuration from the branch under review. A branch that does not carry `.coderabbit.yaml` is reviewed with the defaults, which never approve a pull request — and since every pull request here is authored by the same account, no person can approve it either. The merge then waits forever. Fetch `main` first, or the local `origin/main` may be stale and bring in the old tree: `git fetch origin main && git merge origin/main`. Never rebase or force-push a branch under review.
 
 ## Checking your change on a Vercel preview
 
