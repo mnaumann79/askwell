@@ -117,6 +117,9 @@ importers:
         specifier: 0.0.1
         version: 0.0.1
     devDependencies:
+      '@askwell/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.5
