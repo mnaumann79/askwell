@@ -14,9 +14,12 @@ reviews:
   # "quiet" misses what we want caught.
   profile: "chill"
 
-  # Every pull request is reviewed.
+  # Every pull request is reviewed, and it keeps being reviewed: the default
+  # pauses the automatic review after five reviewed commits, which would let
+  # the last commits of a long pull request through unreviewed.
   auto_review:
     enabled: true
+    auto_pause_after_reviewed_commits: 0
 
   # CodeRabbit's approval is the gate. It approves once its findings are
   # resolved and the latest commit has been reviewed, so a pull request
