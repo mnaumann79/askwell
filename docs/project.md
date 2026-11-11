@@ -346,7 +346,7 @@ docs/
 | `CLERK_WEBHOOK_SIGNING_SECRET`                                                   | Server          | No      |
 | `ARCJET_KEY`                                                                     | Server          | No      |
 | `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`                            | Client + server | Yes     |
-| `NEXT_PUBLIC_APP_URL`                                                            | Client + server | Yes     |
+| `NEXT_PUBLIC_APP_URL` (optional; the server's fallback for the install snippet)  | Server only     | No      |
 | `LANDING_WIDGET_KEY`                                                             | Server (read at request time) | No (it is a public key, but per-environment config) |
 
 `.env.example` lists every variable with no values. `.env` is never committed.
