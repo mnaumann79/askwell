@@ -81,6 +81,12 @@ Two more things the run needs:
   or point `PLAYWRIGHT_MODULE` at the module. The script also looks in the
   npx cache, so a `npx playwright` that is already there is found.
 
+  The browser has to be able to reach the deployment's origin **directly**.
+  The app's own landing page is opened there and not through the proxy: the
+  snippet has to name the deployment the page was served from, and a proxy in
+  front of it would answer with the proxy's origin. The browser that loads
+  the widget still talks to nothing but `127.0.0.1`.
+
 ### What it needs from the deployment
 
 | The deployment must have | Or the check fails with                                      |
@@ -290,13 +296,13 @@ through.
 
 `https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app`, this
 branch's preview, built from `main` with the snippet built from the origin the
-page is served from. The same run against the preview of that change,
-`https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app`, held the
-same way.
+page is served from.
 
 The two answers are different, and the gap between them is the thing the check
-exists to catch. The HTML the deployment served carried the fallback — the
-Preview scope's `NEXT_PUBLIC_APP_URL`, which names another deployment:
+exists to catch. **The `curl` below is against the preview of that change** —
+`https://askwell-git-feature-b1-t11-mnaumann79s-projects.vercel.app` — and it
+shows the HTML that deployment served: the fallback, the Preview scope's
+`NEXT_PUBLIC_APP_URL`, which names another deployment.
 
 ```console
 $ curl -sSL -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
@@ -305,8 +311,10 @@ $ curl -sSL -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
 src=&quot;https://askwell-mnaumann79s-projects.vercel.app/widget.js
 ```
 
-and the browser, once the page had hydrated, showed the origin the page was
-served from:
+**Everything below is this branch's run**, against
+`https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app`. The
+browser, once the page had hydrated, showed the origin the page was served
+from:
 
 ```html
 <script src="https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app/widget.js" data-key="pk_..."></script>
@@ -319,7 +327,8 @@ The check read the browser's answer, not the HTML's, and held:
 - The deployment under test is **https://askwell-git-feature-b1-t12-mnaumann79s-projects.vercel.app**.
 ```
 
-Nothing failed, and the run ended with exit code 0.
+Nothing failed, and the run ended with exit code 0. The run against the
+`b1-t11` preview held the same way.
 
 A deployment whose snippet is a build-time constant that names another
 deployment still fails — that is the bug the check is for, not a defect in the
